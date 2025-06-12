@@ -76,6 +76,9 @@ async def list_tools() -> list[Tool]:
             ("code_review", "🔍 Автоматический анализ кода через Neira. Запускает set_filters, проверяет количество токенов (до 1 млн), подбирает оптимальные фильтры и выполняет детальный Neira-анализ. Поддерживает различные шаблоны анализа. Сохраняет результаты в файл *.analyze.md.")
         ]
         
+        # 🔒 CRITICAL TOOLS: Эти инструменты критичны для работы сервера
+        critical_tools = {"get_context", "code_review"}
+        
         for tool_name, description in tool_configs:
             try:
                 schema = get_tool_schema(tool_name)
@@ -88,14 +91,24 @@ async def list_tools() -> list[Tool]:
                 logger.info(f"✅ Инструмент {tool_name} успешно создан")
             except Exception as e:
                 logger.error(f"❌ Ошибка создания инструмента {tool_name}: {e}")
-                # Создаем инструмент с базовой схемой
+                
+                # 🚨 FAIL-FAST: Если критический инструмент не может быть создан, останавливаем сервер
+                if tool_name in critical_tools:
+                    logger.critical(f"💥 КРИТИЧЕСКАЯ ОШИБКА: Не удается создать обязательный инструмент '{tool_name}'")
+                    logger.critical("Сервер не может работать без критических инструментов. Проверьте схемы и зависимости.")  
+                    import traceback
+                    traceback.print_exc()
+                    raise RuntimeError(f"Failed to create critical tool '{tool_name}': {e}")
+                
+                # Для некритических инструментов создаем fallback с базовой схемой
+                logger.warning(f"⚠️ Создаем fallback для некритического инструмента {tool_name}")
                 tool = Tool(
                     name=tool_name,
-                    description=description,
+                    description=f"[FALLBACK] {description}",
                     inputSchema={"type": "object", "properties": {}}
                 )
                 tools.append(tool)
-                logger.warning(f"⚠️ Инструмент {tool_name} создан с базовой схемой")
+                logger.warning(f"⚠️ Инструмент {tool_name} создан с базовой схемой (fallback mode)")
         
         logger.info(f"📋 Возвращаем {len(tools)} инструментов")
         return tools

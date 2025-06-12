@@ -23,6 +23,69 @@ LARGE_PROJECT_TOKEN_THRESHOLD = 500000  # Порог для определени
 HEAVY_FILE_TYPE_PERCENTAGE_THRESHOLD = 20  # Процент токенов для признания типа файла "тяжелым"  
 HEAVY_FILE_ABSOLUTE_TOKEN_THRESHOLD = 50000  # Абсолютный порог токенов для файла
 
+# 🚀 PERFORMANCE WIN: Предкомпилированные паттерны для избежания создания на каждый вызов
+# Улучшенные паттерны включения по умолчанию
+DEFAULT_INCLUDE_PATTERNS = [
+    # Python
+    '*.py', '*.pyi', '*.pyw',
+    # JavaScript/TypeScript
+    '*.js', '*.jsx', '*.ts', '*.tsx', '*.vue',
+    # Web
+    '*.html', '*.htm', '*.css', '*.scss', '*.sass', '*.less',
+    # Конфигурация
+    '*.json', '*.yaml', '*.yml', '*.toml', '*.ini', '*.cfg',
+    # Документация
+    '*.md', '*.rst', '*.txt',
+    # Shell scripts
+    '*.sh', '*.bash', '*.zsh', '*.fish',
+    # Другие популярные языки
+    '*.rs', '*.go', '*.java', '*.kt', '*.swift', '*.rb', '*.php',
+    # Dockerfile и инфраструктура
+    'Dockerfile*', '*.dockerfile', '*.env*',
+    # Конфиг файлы без расширений
+    'Makefile', 'CMakeLists.txt', 'requirements*.txt', 'package.json', 'pyproject.toml'
+]
+
+# Глобальные исключения для всех типов проектов (оптимизация производительности)
+ENHANCED_EXCLUDE_PATTERNS_BASE = [
+    # Python кэш и временные файлы
+    '__pycache__/**', '*.pyc', '*.pyo', '*.pyd', '.Python',
+    '*.egg-info/**', 'dist/**', 'build/**', '*.whl',
+    '.pytest_cache/**', '.coverage', 'htmlcov/**',
+    # Node.js
+    'node_modules/**', 'npm-debug.log*', 'yarn-debug.log*', 'yarn-error.log*',
+    # Системные и IDE файлы
+    '.DS_Store', '.DS_Store?', '._*', '.Spotlight-V100', '.Trashes',
+    'ehthumbs.db', 'Thumbs.db',
+    # Git и VCS
+    '.git/**', '.svn/**', '.hg/**', '.bzr/**',
+    # IDE и редакторы
+    '.vscode/**', '.idea/**', '*.swp', '*.swo', '*~',
+    '.vim/**', '.emacs.d/**',
+    # Виртуальные окружения
+    'venv/**', '.venv/**', 'env/**', '.env/**',
+    'virtualenv/**', '.virtualenv/**',
+    # Логи и временные файлы
+    '*.log', '*.tmp', '*.temp', '*.cache', '*.lock',
+    'tmp/**', 'temp/**', '.tmp/**', '.temp/**',
+    # Бинарные и медиа файлы (потребляют много токенов)
+    '*.exe', '*.dll', '*.so', '*.dylib', '*.app',
+    '*.png', '*.jpg', '*.jpeg', '*.gif', '*.bmp', '*.svg', '*.ico', '*.icns',
+    '*.mp3', '*.mp4', '*.avi', '*.mov', '*.wmv', '*.flv',
+    '*.pdf', '*.doc', '*.docx', '*.xls', '*.xlsx', '*.ppt', '*.pptx',
+    # Минифицированные файлы
+    '*.min.js', '*.min.css',
+    # Базы данных
+    '*.db', '*.sqlite', '*.sqlite3',
+    # Webpack и сборки
+    '.webpack/**', 'webpack.config.js',
+    # TypeScript build info
+    '*.tsbuildinfo',
+    # Тесты отчеты
+    'test-results/**', 'coverage/**', 'junit.xml',
+    'playwright-report/**', '.nyc_output/**'
+]
+
 @dataclass
 class ContextConfig:
     """Конфигурация для генерации контекста - решает проблему множества параметров"""
@@ -1033,70 +1096,14 @@ class ContextGenerator:
         try:
             from code2prompt_rs import Code2Prompt
             
-            # 🚀 РАСШИРЕННЫЕ ВОЗМОЖНОСТИ code2prompt-rs
+            # 🚀 PERFORMANCE WIN: Используем предкомпилированные константы вместо создания списков
             
-            # Улучшенные паттерны включения по умолчанию
+            # Используем предкомпилированные паттерны включения если не указаны
             if not include_patterns:
-                include_patterns = [
-                    # Python
-                    '*.py', '*.pyi', '*.pyw',
-                    # JavaScript/TypeScript
-                    '*.js', '*.jsx', '*.ts', '*.tsx', '*.vue',
-                    # Web
-                    '*.html', '*.htm', '*.css', '*.scss', '*.sass', '*.less',
-                    # Конфигурация
-                    '*.json', '*.yaml', '*.yml', '*.toml', '*.ini', '*.cfg',
-                    # Документация
-                    '*.md', '*.rst', '*.txt',
-                    # Shell scripts
-                    '*.sh', '*.bash', '*.zsh', '*.fish',
-                    # Другие популярные языки
-                    '*.rs', '*.go', '*.java', '*.kt', '*.swift', '*.rb', '*.php',
-                    # Dockerfile и инфраструктура
-                    'Dockerfile*', '*.dockerfile', '*.env*',
-                    # Конфиг файлы без расширений
-                    'Makefile', 'CMakeLists.txt', 'requirements*.txt', 'package.json', 'pyproject.toml'
-                ]
+                include_patterns = DEFAULT_INCLUDE_PATTERNS
             
-            # Глобальные исключения для всех типов проектов
-            enhanced_exclude_patterns = [
-                # Python кэш и временные файлы
-                '__pycache__/**', '*.pyc', '*.pyo', '*.pyd', '.Python',
-                '*.egg-info/**', 'dist/**', 'build/**', '*.whl',
-                '.pytest_cache/**', '.coverage', 'htmlcov/**',
-                # Node.js
-                'node_modules/**', 'npm-debug.log*', 'yarn-debug.log*', 'yarn-error.log*',
-                # Системные и IDE файлы
-                '.DS_Store', '.DS_Store?', '._*', '.Spotlight-V100', '.Trashes',
-                'ehthumbs.db', 'Thumbs.db',
-                # Git и VCS
-                '.git/**', '.svn/**', '.hg/**', '.bzr/**',
-                # IDE и редакторы
-                '.vscode/**', '.idea/**', '*.swp', '*.swo', '*~',
-                '.vim/**', '.emacs.d/**',
-                # Виртуальные окружения
-                'venv/**', '.venv/**', 'env/**', '.env/**',
-                'virtualenv/**', '.virtualenv/**',
-                # Логи и временные файлы
-                '*.log', '*.tmp', '*.temp', '*.cache', '*.lock',
-                'tmp/**', 'temp/**', '.tmp/**', '.temp/**',
-                # Бинарные и медиа файлы (потребляют много токенов)
-                '*.exe', '*.dll', '*.so', '*.dylib', '*.app',
-                '*.png', '*.jpg', '*.jpeg', '*.gif', '*.bmp', '*.svg', '*.ico', '*.icns',
-                '*.mp3', '*.mp4', '*.avi', '*.mov', '*.wmv', '*.flv',
-                '*.pdf', '*.doc', '*.docx', '*.xls', '*.xlsx', '*.ppt', '*.pptx',
-                # Минифицированные файлы
-                '*.min.js', '*.min.css',
-                # Базы данных
-                '*.db', '*.sqlite', '*.sqlite3',
-                # Webpack и сборки
-                '.webpack/**', 'webpack.config.js',
-                # TypeScript build info
-                '*.tsbuildinfo',
-                # Тесты отчеты
-                'test-results/**', 'coverage/**', 'junit.xml',
-                'playwright-report/**', '.nyc_output/**'
-            ] + (exclude_patterns or [])
+            # Объединяем предкомпилированные enhanced patterns с пользовательскими exclude patterns
+            enhanced_exclude_patterns = ENHANCED_EXCLUDE_PATTERNS_BASE + (exclude_patterns or [])
             
             # Извлекаем дополнительные опции из kwargs
             line_numbers = kwargs.get('line_numbers', False)

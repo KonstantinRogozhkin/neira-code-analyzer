@@ -33,6 +33,15 @@ class NeiraAnalyzer:
         except ImportError:
             logger.warning("Neira analyzer initialized without Neira module")
             self._generate_ai_review_func = None
+            
+        # Инициализируем context_generator через DI контейнер
+        self.context_generator = None
+        try:
+            from .container import get_context_generator
+            self.context_generator = get_context_generator()
+            logger.info("Context generator initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize context generator: {e}")
 
     def generate_ai_review(self, prompt_text: str, model_name: str = DEFAULT_MODEL) -> str:
         """
@@ -68,7 +77,9 @@ class NeiraAnalyzer:
 
     async def perform_code_review(self, path: str, template_name: str = DEFAULT_TEMPLATE_NAME,
                            include_patterns: list = None, exclude_patterns: list = None, 
-                           max_tokens: int = 1000000, ai_model: str = DEFAULT_MODEL) -> str:
+                           max_tokens: int = 1000000, ai_model: str = DEFAULT_MODEL,
+                           preset_name: str = None, merge_with_preset: bool = False,
+                           save_as_preset: str = None) -> str:
         """
         Выполнить автоматический Neira анализ кода
         
@@ -79,42 +90,72 @@ class NeiraAnalyzer:
             exclude_patterns: Паттерны исключения файлов  
             max_tokens: Максимальное количество токенов
             ai_model: Модель Neira
+            preset_name: Название пресета для фильтрации файлов
+            merge_with_preset: Объединить пресет с пользовательскими паттернами
+            save_as_preset: Сохранить текущие настройки как новый пресет
             
         Returns:
             str: Результат анализа и статистика
         """
+        # Валидация и инициализация параметров
         if include_patterns is None:
             include_patterns = []
         if exclude_patterns is None:
             exclude_patterns = []
             
+        # Валидация параметров
+        validation_error = self._validate_parameters(
+            path, template_name, include_patterns, exclude_patterns, 
+            max_tokens, ai_model, preset_name, merge_with_preset
+        )
+        if validation_error:
+            return validation_error
+            
+        # Применяем preset_name если указан
+        resolved_include, resolved_exclude = self._resolve_preset_patterns(
+            include_patterns, exclude_patterns, preset_name, merge_with_preset
+        )
+            
         logger.info(f"Starting Neira analysis for {path} with template: {template_name}, max tokens: {max_tokens}")
+        
+        # Проверяем что context_generator инициализирован
+        if not self.context_generator:
+            return "❌ **КРИТИЧЕСКАЯ ОШИБКА:** Context generator не инициализирован. Перезапустите сервер.\n"
         
         response = f"# 🔍 Автоматический Neira анализ через Neira\n\n"
         response += f"**🎯 Шаблон анализа:** {template_name}\n\n"
+        
+        # Добавляем информацию о пресете если используется
+        if preset_name:
+            response += f"**🎛️ Пресет:** {preset_name} ({'объединен' if merge_with_preset else 'заменен'})\n\n"
         
         try:
             # ЭТАП 1: Генерация промпта из кода
             response += "## 📁 Этап 1: Сбор и анализ кода\n\n"
             
-            # Используем ContextGenerator для получения кода
-            code_content = self.context_generator.get_context(
-                path=path, 
-                template_name=template_name,
-                include_patterns=include_patterns or [],
-                exclude_patterns=exclude_patterns or [],
-                line_numbers=True,
-                code_blocks=True,
-                follow_symlinks=False,
-                encoding="cl100k"
-            )
+            # Используем ContextGenerator для получения кода с resolved паттернами
+            context_args = {
+                "path": path,
+                "template_name": template_name,
+                "include_patterns": resolved_include,
+                "exclude_patterns": resolved_exclude,
+                "line_numbers": True,
+                "code_blocks": True,
+                "follow_symlinks": False,
+                "encoding": "cl100k"
+            }
+            
+            context_results = await self.context_generator.get_context(context_args)
+            code_content = context_results[0].text if context_results else ""
             
             if not code_content or len(code_content.strip()) < 100:
                 return response + "❌ **ОШИБКА:** Не удалось извлечь достаточно кода для анализа.\n"
             
-            # Проверяем количество токенов
-            current_tokens = self.context_generator.count_tokens(code_content, "cl100k")
-            response += f"**📊 Размер кодовой базы:** {current_tokens:,} токенов\n\n"
+            # Получаем количество токенов из результата code2prompt-rs
+            # Используем простую эстимацию на основе длины текста если нет точных данных
+            current_tokens = len(code_content.split()) * 1.3  # Примерно 1.3 токена на слово
+            current_tokens = int(current_tokens)
+            response += f"**📊 Размер кодовой базы:** {current_tokens:,} токенов (оценочно)\n\n"
             
             if current_tokens > max_tokens:
                 return response + f"❌ **ОШИБКА:** Размер кода ({current_tokens:,} токенов) превышает лимит ({max_tokens:,}).\n"
@@ -127,11 +168,124 @@ class NeiraAnalyzer:
             if ai_analysis:
                 response += self._save_results(path, ai_analysis, code_content, current_tokens, ai_model)
                 
+            # Сохранение как пресет если запрошено
+            if save_as_preset:
+                preset_response = self._save_current_as_preset(
+                    save_as_preset, resolved_include, resolved_exclude, path
+                )
+                response += preset_response
+                
         except Exception as e:
             logger.error(f"Code review error: {e}")
             return f"❌ **КРИТИЧЕСКАЯ ОШИБКА:** {str(e)}\n"
         
         return response
+
+    def _validate_parameters(self, path: str, template_name: str, include_patterns: list, 
+                           exclude_patterns: list, max_tokens: int, ai_model: str,
+                           preset_name: str = None, merge_with_preset: bool = False) -> str:
+        """
+        Валидация входных параметров
+        
+        Returns:
+            str: Сообщение об ошибке или пустая строка если все ОК
+        """
+        if not path or not isinstance(path, str):
+            return "❌ **ОШИБКА ВАЛИДАЦИИ:** Параметр 'path' обязателен и должен быть строкой.\n"
+            
+        if not template_name or not isinstance(template_name, str):
+            return f"❌ **ОШИБКА ВАЛИДАЦИИ:** Параметр 'template_name' должен быть строкой. Получено: {type(template_name)}\n"
+        
+        if not isinstance(include_patterns, list):
+            return f"❌ **ОШИБКА ВАЛИДАЦИИ:** 'include_patterns' должен быть списком. Получено: {type(include_patterns)}\n"
+            
+        if not isinstance(exclude_patterns, list):
+            return f"❌ **ОШИБКА ВАЛИДАЦИИ:** 'exclude_patterns' должен быть списком. Получено: {type(exclude_patterns)}\n"
+            
+        if not isinstance(max_tokens, int) or max_tokens <= 0:
+            return f"❌ **ОШИБКА ВАЛИДАЦИИ:** 'max_tokens' должен быть положительным числом. Получено: {max_tokens}\n"
+            
+        if not ai_model or not isinstance(ai_model, str):
+            return f"❌ **ОШИБКА ВАЛИДАЦИИ:** 'ai_model' должен быть строкой. Получено: {type(ai_model)}\n"
+            
+        if preset_name is not None and not isinstance(preset_name, str):
+            return f"❌ **ОШИБКА ВАЛИДАЦИИ:** 'preset_name' должен быть строкой или None. Получено: {type(preset_name)}\n"
+            
+        if not isinstance(merge_with_preset, bool):
+            return f"❌ **ОШИБКА ВАЛИДАЦИИ:** 'merge_with_preset' должен быть boolean. Получено: {type(merge_with_preset)}\n"
+            
+        return ""  # Все параметры валидны
+
+    def _resolve_preset_patterns(self, include_patterns: list, exclude_patterns: list,
+                               preset_name: str = None, merge_with_preset: bool = False) -> tuple[list, list]:
+        """
+        Разрешение паттернов с учетом пресета
+        
+        Args:
+            include_patterns: Исходные include паттерны
+            exclude_patterns: Исходные exclude паттерны  
+            preset_name: Название пресета
+            merge_with_preset: Объединить с пресетом или заменить
+            
+        Returns:
+            tuple: (resolved_include_patterns, resolved_exclude_patterns)
+        """
+        if not preset_name:
+            return include_patterns, exclude_patterns
+            
+        try:
+            # Получаем паттерны из пресета
+            from .filters import load_preset
+            preset_patterns = load_preset(preset_name)
+            
+            if not preset_patterns:
+                logger.warning(f"Пресет '{preset_name}' не найден, используем исходные паттерны")
+                return include_patterns, exclude_patterns
+                
+            preset_include = preset_patterns.get("include", [])
+            preset_exclude = preset_patterns.get("exclude", [])
+            
+            if merge_with_preset:
+                # Объединяем паттерны: пресет + пользовательские
+                merged_include = list(set(preset_include + include_patterns))  
+                merged_exclude = list(set(preset_exclude + exclude_patterns))
+                
+                logger.info(f"Объединены паттерны пресета '{preset_name}' с пользовательскими")
+                return merged_include, merged_exclude
+            else:
+                # Заменяем паттерны на паттерны из пресета
+                logger.info(f"Используются паттерны из пресета '{preset_name}'")
+                return preset_include, preset_exclude
+                
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке пресета '{preset_name}': {e}")
+            return include_patterns, exclude_patterns
+
+    def _save_current_as_preset(self, preset_name: str, include_patterns: list, 
+                              exclude_patterns: list, path: str) -> str:
+        """
+        Сохранение текущих настроек как новый пресет
+        
+        Returns:
+            str: Сообщение о результате сохранения
+        """
+        try:
+            from .filters import FilterManager
+            manager = FilterManager()
+            
+            # Определяем описание на основе пути
+            project_name = path.split('/')[-1] if '/' in path else path
+            description = f"Настройки для проекта {project_name}"
+            
+            saved_name = manager.save_preset(
+                preset_name, include_patterns, exclude_patterns, description
+            )
+            
+            return f"\n## 💾 Пресет сохранен\n\n**Название:** {saved_name}\n**Описание:** {description}\n\n"
+            
+        except Exception as e:
+            logger.error(f"Ошибка сохранения пресета '{preset_name}': {e}")
+            return f"\n❌ **ОШИБКА:** Не удалось сохранить пресет '{preset_name}': {str(e)}\n\n"
 
     async def _run_filter_analysis(self, path: str, include_patterns: list, exclude_patterns: list) -> tuple[int, str]:
         """

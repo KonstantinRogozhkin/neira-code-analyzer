@@ -141,27 +141,86 @@ class ProjectManager:
         Returns:
             Path: Полный путь для сохранения файла
         """
-        save_path = Path(save_to_file)
+        # 🔒 SECURITY FIX: Валидация и нормализация путей для предотвращения path injection
+        try:
+            save_path = Path(save_to_file).resolve()
+        except (OSError, ValueError) as e:
+            logger.error(f"Invalid path provided: {save_to_file}, error: {e}")
+            # Если путь некорректен, создаем безопасное имя файла
+            safe_filename = "".join(c for c in save_to_file if c.isalnum() or c in ('-', '_', '.'))
+            save_path = Path(safe_filename)
         
         # Если указан относительный путь, используем версионированную структуру
         if not save_path.is_absolute():
             # Создаем версионированную структуру в папке analysis
             project_folder, version = self.get_next_project_version(project_path)
             
-            # Извлекаем название проекта
-            project_name = Path(project_path).name
+            # 🔒 SECURITY: Санитизация имени проекта для предотвращения path traversal
+            project_name = self._sanitize_filename(Path(project_path).name)
+            if not project_name:
+                project_name = "unknown-project"
+            
+            # 🔒 SECURITY: Санитизация типа файла
+            safe_file_type = self._sanitize_filename(file_type)
             
             # Создаем имя файла в формате: project-name.type.md (версия в папке)
-            filename = f"{project_name}.{file_type}.md"
+            filename = f"{project_name}.{safe_file_type}.md"
             save_path = project_folder / filename
             
             logger.info(f"Relative path: {save_to_file} saved to versioned project folder: {save_path}")
         else:
+            # 🔒 SECURITY: Проверяем что абсолютный путь не ведет за пределы базовой папки анализа
+            try:
+                # Проверяем что resolved путь остается в пределах допустимой области
+                resolved_path = save_path.resolve()
+                base_resolved = self.base_analysis_path.resolve()
+                
+                # Если путь не в пределах нашей базовой папки анализа, перенаправляем в безопасное место
+                if not str(resolved_path).startswith(str(base_resolved)):
+                    logger.warning(f"Path {resolved_path} is outside analysis base {base_resolved}, redirecting to safe location")
+                    # Перенаправляем в безопасную папку
+                    safe_filename = self._sanitize_filename(save_path.name)
+                    save_path = self.base_analysis_path / "external" / safe_filename
+                    save_path.parent.mkdir(parents=True, exist_ok=True)
+                
+            except (OSError, ValueError) as e:
+                logger.error(f"Error resolving absolute path {save_path}: {e}")
+                # Fallback к безопасному пути
+                safe_filename = self._sanitize_filename(save_path.name if save_path.name else "fallback.md")
+                save_path = self.base_analysis_path / "fallback" / safe_filename
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+            
             logger.info(f"Using absolute path: {save_path}")
             # Создаем директорию если не существует
             save_path.parent.mkdir(parents=True, exist_ok=True)
         
         return save_path
+
+    def _sanitize_filename(self, filename: str) -> str:
+        """
+        Санитизация имени файла для предотвращения path injection
+        
+        Args:
+            filename: Исходное имя файла
+            
+        Returns:
+            str: Безопасное имя файла
+        """
+        if not filename:
+            return "unknown"
+        
+        # Убираем потенциально опасные символы
+        safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
+        sanitized = "".join(c for c in filename if c in safe_chars)
+        
+        # Убираем path traversal последовательности
+        sanitized = sanitized.replace("..", "").replace("./", "").replace("../", "")
+        
+        # Обеспечиваем что имя не пустое
+        if not sanitized:
+            sanitized = "sanitized"
+        
+        return sanitized
 
     def get_project_name(self, project_path: str) -> str:
         """

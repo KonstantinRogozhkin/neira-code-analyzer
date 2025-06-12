@@ -11,7 +11,7 @@ dependencies = [
     "colorlog>=6.9.0",
     "code2prompt-rs>=3.2.1",
     # Neira API library (currently using google-genai as backend)
-"google-genai>=1.19.0",
+    "google-genai>=1.19.0",
     "python-dotenv>=1.0.0",
 ]
 readme = "README.md"
