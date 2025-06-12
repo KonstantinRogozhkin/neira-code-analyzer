@@ -20,3 +20,6 @@ docs/archive/
 
 analysis/
 analysis/*
+
+# neira-code-analyzer project filters (add manually if needed for team)
+.neira

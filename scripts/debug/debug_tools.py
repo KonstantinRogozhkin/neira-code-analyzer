@@ -5,7 +5,7 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# Исправлено: убран sys.path хак - используем правильный импорт из корня проекта
 
 async def debug_tools():
     """Проверяем какие инструменты доступны"""
@@ -13,7 +13,7 @@ async def debug_tools():
     print("🔍 Проверяем доступные MCP инструменты...")
     
     try:
-        from neira_code_analyzer.main import list_tools
+        from src.neira_code_analyzer.main import list_tools
         
         # Получаем список инструментов
         tools = await list_tools()

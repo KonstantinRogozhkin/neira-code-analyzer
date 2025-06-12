@@ -119,8 +119,8 @@ def setup_container() -> None:
         return ContextGenerator()
         
     def create_ai_analyzer():
-        from .ai_analyzer import AIAnalyzer
-        return AIAnalyzer()
+        from .ai_analyzer import NeiraAnalyzer
+        return NeiraAnalyzer()
         
     # Регистрируем фабрики
     container.register_factory("template_manager", create_template_manager)
@@ -161,5 +161,5 @@ def get_context_generator():
 
 
 def get_ai_analyzer():
-    """Получить экземпляр AIAnalyzer"""
+    """Получить экземпляр NeiraAnalyzer"""
     return get_service("ai_analyzer") 

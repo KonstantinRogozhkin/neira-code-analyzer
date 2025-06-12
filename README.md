@@ -83,41 +83,6 @@ rye sync
   "include_patterns": ["*.py", "*.js"],
   "exclude_patterns": ["tests/**", "node_modules/**"],
   "max_tokens": 500000,
-  "google_ai_model": "gemini-2.5-pro-preview-06-05"
+  "ai_model": "neira-2.5-pro-preview-06-05"
 }
-```
-
-### 4. Пример использования get_context
-
-```json
-{
-  "path": "/Users/username/Projects/my-project", 
-  "template_name": "code-review",
-  "include_patterns": ["*.py", "*.md"],
-  "exclude_patterns": ["tests/**", "__pycache__/**", ".git/**"]
-}
-```
-
-📖 **Подробная документация:** См. [USAGE.md](USAGE.md)
-
-## License
-
-MIT License - See LICENSE file for details.
-
-## Development
-
-### Тестирование
-
-Для тестирования MCP сервера используйте MCP Inspector:
-
-```bash
-npx @modelcontextprotocol/inspector uv run python -m src.neira_code_analyzer.main
-```
-
-### Отладка
-
-Для отладки запустите сервер напрямую:
-
-```bash
-uv run python -m src.neira_code_analyzer.main
 ```

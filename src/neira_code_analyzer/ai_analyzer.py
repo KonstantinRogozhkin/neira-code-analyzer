@@ -1,7 +1,7 @@
 """
-AI анализатор для Neira Code Analyzer
+Neira анализатор для Neira Code Analyzer
 
-Модуль для интеграции с AI сервисами и анализа кода.
+Модуль для интеграции с Neira сервисами и анализа кода.
 """
 
 from typing import Optional, Dict, Any
@@ -16,120 +16,120 @@ logger = logging.getLogger(__name__)
 # Константы для устранения "магических" значений
 DEFAULT_TEMPLATE_NAME = "code-review"
 DEFAULT_ENCODING = "cl100k"
-DEFAULT_MODEL = "gemini-2.5-pro-preview-06-05"
+DEFAULT_MODEL = "neira-2.5-pro-preview-06-05"
 
-class AIAnalyzer:
-    """Анализатор кода с помощью AI"""
+class NeiraAnalyzer:
+    """Анализатор кода с помощью Neira"""
     
     def __init__(self):
-        """Инициализация AI анализатора"""
+        """Инициализация Neira анализатора"""
         # Инициализируем ai модуль из ai_utils для избежания циклических зависимостей
         self._ai_module_available = False
         try:
             from .ai_utils import generate_ai_review
             self._generate_ai_review_func = generate_ai_review
             self._ai_module_available = True
-            logger.info("AI analyzer initialized with AI module")
+            logger.info("Neira analyzer initialized with Neira module")
         except ImportError:
-            logger.warning("AI analyzer initialized without AI module")
+            logger.warning("Neira analyzer initialized without Neira module")
             self._generate_ai_review_func = None
 
     def generate_ai_review(self, prompt_text: str, model_name: str = DEFAULT_MODEL) -> str:
         """
-        Генерирует AI анализ кода с помощью Neira AI
+        Код ревью с помощью Neira
         
         Args:
-            prompt_text: Текст для анализа (код проекта)
-            model_name: Название модели Neira AI
+            prompt_text: Промпт с кодом для анализа
+            model_name: Название модели Neira
             
         Returns:
-            str: AI анализ кода
+            str: Neira анализ кода
             
         Raises:
             ImportError: Если ai модуль недоступен
             ValueError: Если API ключ не установлен
-            Exception: При ошибке взаимодействия с Neira AI
+            Exception: При ошибке взаимодействия с Neira
         """
         if not self._ai_module_available:
             raise ImportError("Модуль ai недоступен. Убедитесь, что файл ai.py существует в src/neira_code_analyzer/ и установлены зависимости")
         
         try:
-            logger.info(f"Вызываем AI анализ с моделью {model_name}")
+            logger.info(f"Вызываем Neira анализ с моделью {model_name}")
             result = self._generate_ai_review_func(prompt_text, model_name)
             
             if result and result.strip():
                 return result.strip()
             else:
-                raise Exception("Получен пустой ответ от AI")
+                raise Exception("Получен пустой ответ от Neira")
                 
         except Exception as e:
-            logger.error(f"Ошибка AI анализа: {e}")
+            logger.error(f"Ошибка Neira анализа: {e}")
             raise
 
     async def perform_code_review(self, path: str, template_name: str = DEFAULT_TEMPLATE_NAME,
                            include_patterns: list = None, exclude_patterns: list = None, 
-                           max_tokens: int = 1000000, google_ai_model: str = DEFAULT_MODEL) -> str:
+                           max_tokens: int = 1000000, ai_model: str = DEFAULT_MODEL) -> str:
         """
-        Выполнить автоматический AI анализ кода
+        Выполнить автоматический Neira анализ кода
         
         Args:
-            path: Путь к проекту
-            template_name: Имя шаблона для анализа (code-review, security-audit, etc.)
+            path: Путь к проекту для анализа
+            template_name: Название шаблона анализа
             include_patterns: Паттерны включения файлов
             exclude_patterns: Паттерны исключения файлов  
             max_tokens: Максимальное количество токенов
-            google_ai_model: Модель Neira AI
+            ai_model: Модель Neira
             
         Returns:
-            str: Результат анализа
+            str: Результат анализа и статистика
         """
         if include_patterns is None:
             include_patterns = []
         if exclude_patterns is None:
             exclude_patterns = []
             
-        logger.info(f"Starting AI analysis for {path} with template: {template_name}, max tokens: {max_tokens}")
+        logger.info(f"Starting Neira analysis for {path} with template: {template_name}, max tokens: {max_tokens}")
         
-        response = f"# 🔍 Автоматический AI анализ через Neira AI\n\n"
+        response = f"# 🔍 Автоматический Neira анализ через Neira\n\n"
         response += f"**🎯 Шаблон анализа:** {template_name}\n\n"
         
         try:
-            # ЭТАП 1: Анализ фильтров
-            current_tokens, filter_response = await self._run_filter_analysis(path, include_patterns, exclude_patterns)
-            response += filter_response
-            response += f"**📏 Лимит токенов:** {max_tokens:,}\n\n"
+            # ЭТАП 1: Генерация промпта из кода
+            response += "## 📁 Этап 1: Сбор и анализ кода\n\n"
             
-            # ЭТАП 2: Оптимизация фильтров если нужно
-            current_tokens, final_include_patterns, final_exclude_patterns, optimize_response = await self._optimize_filters_if_needed(
-                path, current_tokens, max_tokens, include_patterns, exclude_patterns
+            # Используем ContextGenerator для получения кода
+            code_content = self.context_generator.get_context(
+                path=path, 
+                template_name=template_name,
+                include_patterns=include_patterns or [],
+                exclude_patterns=exclude_patterns or [],
+                line_numbers=True,
+                code_blocks=True,
+                follow_symlinks=False,
+                encoding="cl100k"
             )
-            response += optimize_response
             
-            # Если даже после оптимизации превышен лимит, возвращаем ошибку
+            if not code_content or len(code_content.strip()) < 100:
+                return response + "❌ **ОШИБКА:** Не удалось извлечь достаточно кода для анализа.\n"
+            
+            # Проверяем количество токенов
+            current_tokens = self.context_generator.count_tokens(code_content, "cl100k")
+            response += f"**📊 Размер кодовой базы:** {current_tokens:,} токенов\n\n"
+            
             if current_tokens > max_tokens:
-                return response
+                return response + f"❌ **ОШИБКА:** Размер кода ({current_tokens:,} токенов) превышает лимит ({max_tokens:,}).\n"
             
-            # ЭТАП 3: Извлечение кода с шаблоном
-            code_content, code_response = await self._extract_code_with_template(
-                path, final_include_patterns, final_exclude_patterns, current_tokens, template_name
-            )
-            response += code_response
-            
-            # Если не удалось извлечь код, возвращаем ошибку
-            if not code_content:
-                return response
-            
-            # ЭТАП 4: Анализ через Neira AI
-            ai_analysis, ai_response = await self._fetch_ai_review(code_content, google_ai_model)
+            # ЭТАП 4: Анализ через Neira
+            ai_analysis, ai_response = await self._fetch_ai_review(code_content, ai_model)
             response += ai_response
             
-            # ЭТАП 5: Сохранение результатов (только если есть AI анализ)
+            # ЭТАП 5: Сохранение результатов (только если есть Neira анализ)
             if ai_analysis:
-                response += self._save_results(path, ai_analysis, code_content, current_tokens, google_ai_model)
+                response += self._save_results(path, ai_analysis, code_content, current_tokens, ai_model)
                 
         except Exception as e:
-            response += f"❌ **КРИТИЧЕСКАЯ ОШИБКА:** {str(e)}\n"
             logger.error(f"Code review error: {e}")
+            return f"❌ **КРИТИЧЕСКАЯ ОШИБКА:** {str(e)}\n"
         
         return response
 
@@ -146,7 +146,7 @@ class AIAnalyzer:
         
         response = "## 📊 Этап 1: Анализ структуры проекта\n\n"
         
-        # Запускаем analyze_filters для получения статистики
+        # ИСПРАВЛЕНИЕ: Используем analyze_filters вместо set_filters для анализа без побочных эффектов
         filter_args = {
             "path": path,
             "include_patterns": include_patterns,
@@ -202,7 +202,7 @@ class AIAnalyzer:
                 "encoding": DEFAULT_ENCODING
             }
             
-            # Получаем структурированный результат оптимизированного анализа
+            # ИСПРАВЛЕНИЕ: Используем analyze_filters вместо set_filters для анализа без побочных эффектов
             optimized_result = await context_generator.analyze_filters(optimized_filter_args)
             optimized_tokens = optimized_result.total_tokens
             
@@ -263,37 +263,37 @@ class AIAnalyzer:
         
         return code_content, response
 
-    async def _fetch_ai_review(self, code_content: str, google_ai_model: str) -> tuple[str, str]:
+    async def _fetch_ai_review(self, code_content: str, ai_model: str) -> tuple[str, str]:
         """
-        Получение AI анализа
+        Получение Neira анализа
         
         Returns:
-            tuple: (AI анализ, текст ответа)
+            tuple: (Neira анализ, текст ответа)
         """
-        response = "## 🤖 Этап 4: Анализ через Neira AI\n\n"
+        response = "## 🤖 Этап 4: Анализ через Neira\n\n"
         
         try:
-            response += f"**🔄 Отправляем на анализ в {google_ai_model}...**\n"
+            response += f"**🔄 Отправляем на анализ в {ai_model}...**\n"
             response += f"**📝 Размер промпта:** {len(code_content):,} символов\n\n"
             
-            # Вызываем AI анализ
-            ai_analysis = self.generate_ai_review(code_content, google_ai_model)
+            # Вызываем Neira анализ
+            ai_analysis = self.generate_ai_review(code_content, ai_model)
             
             if ai_analysis and ai_analysis.strip():
                 ai_analysis = ai_analysis.strip()
-                response += "**✅ Анализ получен от Neira AI:**\n\n"
+                response += "**✅ Анализ получен от Neira:**\n\n"
                 return ai_analysis, response
             else:
-                response += "❌ **ОШИБКА:** Получен пустой ответ от Neira AI\n"
+                response += "❌ **ОШИБКА:** Получен пустой ответ от Neira\n"
                 return "", response
                 
         except Exception as ai_error:
-            response += f"❌ **ОШИБКА AI:** {str(ai_error)}\n"
-            logger.error(f"AI analysis error: {ai_error}")
+            response += f"❌ **ОШИБКА Neira:** {str(ai_error)}\n"
+            logger.error(f"Neira analysis error: {ai_error}")
             return "", response
 
     def _save_results(self, path: str, ai_analysis: str, code_content: str,
-                     current_tokens: int, google_ai_model: str) -> str:
+                     current_tokens: int, ai_model: str) -> str:
         """
         Сохранение результатов анализа и возврат краткого отчёта
         
@@ -304,14 +304,14 @@ class AIAnalyzer:
         
         # Сохраняем результаты
         saved_files = self._save_review_results(
-            path, ai_analysis, code_content, current_tokens, google_ai_model
+            path, ai_analysis, code_content, current_tokens, ai_model
         )
         
         analyze_file_path = None
         for file_info in saved_files:
             response += f"- {file_info}\n"
             # Ищем путь к файлу анализа
-            if "AI анализ:" in file_info and "`" in file_info:
+            if "Neira анализ:" in file_info and "`" in file_info:
                 analyze_file_path = file_info.split("`")[1]
         
         response += f"\n**📋 Всего файлов сохранено:** {len(saved_files)}\n\n"
@@ -353,7 +353,7 @@ class AIAnalyzer:
         saved_files = []
         
         try:
-            # 1. Сохраняем AI анализ
+            # 1. Сохраняем Neira анализ
             analyze_filename = f"{project_name}.analyze.md"
             analyze_save_path = project_folder / analyze_filename
             
@@ -366,7 +366,7 @@ class AIAnalyzer:
             final_content += ai_analysis
             
             analyze_save_path.write_text(final_content, encoding='utf-8')
-            saved_files.append(f"📋 AI анализ: `{analyze_save_path}`")
+            saved_files.append(f"📋 Neira анализ: `{analyze_save_path}`")
             
             # 2. Сохраняем извлеченный код
             code_filename = f"{project_name}.code.md"

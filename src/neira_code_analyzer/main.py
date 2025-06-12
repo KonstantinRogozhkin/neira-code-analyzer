@@ -69,10 +69,11 @@ async def list_tools() -> list[Tool]:
         
         # Создаем инструменты по одному с обработкой ошибок
         tool_configs = [
-            ("get_context", "Generate contextual prompts from codebases using code2prompt-rs library. Analyzes codebases and produces structured summaries optimized for AI consumption with glob pattern filtering, custom templates, and token counting."),
-            ("analyze_filters", "🔍 Analyze and test file filters to optimize codebase selection for AI analysis. Shows file structure, token counts, and statistics by file types to help create perfect filters that exclude unnecessary files and reduce context size.\n\n💡 PRINCIPLE: \"Provide as little context as possible, but as much as necessary\" - максимально исключить ненужные файлы, включить только необходимые для анализа."),
+            ("get_context", "Generates contextual prompts from codebases using code2prompt-rs library. Analyzes codebases and produces structured summaries optimized for Neira consumption with glob pattern filtering, custom templates, and token counting."),
+            ("set_filters", "🎯 Автоматически подбирает оптимальные фильтры для проекта и сохраняет их в .neira. Анализирует структуру проекта, определяет тип (Python, React, etc.), применяет подходящие фильтры и сохраняет конфигурацию для повторного использования."),
             ("get_templates", "🎯 STEP 1: Get list of available professional templates for code analysis. Use this FIRST to see all available templates (code-review, security-audit, documentation, etc.) with descriptions and use cases. Then use 'get_context' with 'template_name' parameter."),
-            ("code_review", "🔍 Автоматический анализ кода через Neira . Запускает analyze_filters, проверяет количество токенов (до 1 млн), подбирает оптимальные фильтры и выполняет детальный AI-анализ через Gemini AI. Поддерживает различные шаблоны анализа. Сохраняет результаты в файл *.analyze.md.")
+            ("manage_presets", "🎛️ Управление пресетами фильтров: просмотр, создание, удаление, экспорт/импорт сохраненных конфигураций фильтров. Позволяет сохранять удачные комбинации include/exclude паттернов для повторного использования в разных проектах."),
+            ("code_review", "🔍 Автоматический анализ кода через Neira. Запускает set_filters, проверяет количество токенов (до 1 млн), подбирает оптимальные фильтры и выполняет детальный Neira-анализ. Поддерживает различные шаблоны анализа. Сохраняет результаты в файл *.analyze.md.")
         ]
         
         for tool_name, description in tool_configs:
@@ -124,8 +125,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     # Словарь-диспетчер для масштабируемости
     tool_handlers = {
         "get_context": get_context_tool,
-        "analyze_filters": analyze_filters_tool,
+        "set_filters": set_filters_tool,
         "get_templates": get_templates_tool,
+        "manage_presets": manage_presets_tool,
         "code_review": code_review_tool
     }
     
@@ -155,28 +157,28 @@ async def get_context_tool(arguments: dict) -> list[TextContent]:
     # Перенаправляем вызов на реализацию в context_generator
     return await context_generator.get_context(arguments)
 
-async def analyze_filters_tool(arguments: dict) -> list[TextContent]:
+async def set_filters_tool(arguments: dict) -> list[TextContent]:
     """
-    Анализирует и тестирует фильтры файлов для оптимизации выбора кодовой базы.
+    Автоматически подбирает оптимальные фильтры для проекта и сохраняет их.
     
-    💡 ПРИНЦИП: "Provide as little context as possible, but as much as necessary"
+    🎯 ЦЕЛЬ: Настроить проект с оптимальными фильтрами один раз и использовать везде.
     
-    Цель: МАКСИМАЛЬНО ИСКЛЮЧИТЬ ненужные файлы, ВКЛЮЧИТЬ только необходимые.
-    Показывает структуру файлов, подсчет токенов и статистику по типам файлов
-    для создания идеальных фильтров, отсеивающих лишний код.
+    Анализирует структуру проекта, определяет тип (Python, React, etc.), 
+            подбирает подходящие фильтры и сохраняет конфигурацию в .neira
+    в корне проекта для повторного использования.
     
     Args:
-        arguments: Словарь с параметрами анализа фильтров
+        arguments: Словарь с параметрами настройки фильтров
         
     Returns:
-        list[TextContent]: Детальный анализ файловой структуры и рекомендации
+        list[TextContent]: Отчет о настройке и сохранении фильтров
     """
     # Получаем context_generator через DI контейнер для устранения циклических зависимостей  
     from .container import get_context_generator
     context_generator = get_context_generator()
     
     # Используем MCP обертку для совместимости
-    return await context_generator.analyze_filters_tool(arguments)
+    return await context_generator.set_filters_tool(arguments)
 
 
 async def get_templates_tool(arguments: dict) -> list[TextContent]:
@@ -207,6 +209,167 @@ async def get_templates_tool(arguments: dict) -> list[TextContent]:
     except Exception as e:
         logger.error(f"Error getting templates: {e}")
         return [TextContent(type="text", text=f"❌ Ошибка при получении шаблонов: {str(e)}")]
+
+async def manage_presets_tool(arguments: dict) -> list[TextContent]:
+    """
+    Управление пресетами фильтров: просмотр, создание, удаление, экспорт/импорт
+    
+    Args:
+        arguments: Параметры операции с пресетами
+        
+    Returns:
+        list[TextContent]: Результат операции с пресетами
+    """
+    try:
+        from .filters import get_preset_manager, list_available_presets, get_preset_details
+        
+        action = arguments.get("action", "list")
+        
+        if action == "list":
+            # Список всех доступных пресетов
+            presets = list_available_presets()
+            
+            response = "# 🎛️ Управление пресетами фильтров\n\n"
+            response += f"## 📋 Доступные пресеты ({len(presets)})\n\n"
+            
+            for name, description in presets.items():
+                # Определяем тип пресета
+                if name in ["default", "aggressive", "code-only", "python-project", "web-app", "react-app", "electron-app"]:
+                    preset_type = "🏗️ Встроенный"
+                else:
+                    preset_type = "👤 Пользовательский"
+                
+                response += f"### {preset_type}: `{name}`\n"
+                response += f"**Описание:** {description}\n\n"
+            
+            # Инструкции по использованию
+            response += "## 🚀 Как использовать пресеты\n\n"
+            response += "**Загрузка пресета:**\n"
+            response += "```json\n"
+            response += '{"preset_name": "python-project"}\n'
+            response += "```\n\n"
+            
+            response += "**Создание пресета:**\n"
+            response += "```json\n"
+            response += '{\n  "action": "create",\n  "name": "my-preset",\n  "include_patterns": ["*.py", "*.md"],\n  "exclude_patterns": ["tests/**"],\n  "description": "Мой пресет"\n}\n'
+            response += "```\n\n"
+            
+            return [TextContent(type="text", text=response)]
+            
+        elif action == "create":
+            # Создание нового пресета
+            name = arguments.get("name")
+            include_patterns = arguments.get("include_patterns", [])
+            exclude_patterns = arguments.get("exclude_patterns", [])
+            description = arguments.get("description", "")
+            
+            if not name:
+                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' для создания пресета")]
+            
+            from .filters import save_preset
+            success = save_preset(name, include_patterns, exclude_patterns, description)
+            
+            if success:
+                response = f"✅ Пресет '{name}' успешно создан!\n\n"
+                response += f"**Описание:** {description}\n"
+                response += f"**Include паттерны:** {include_patterns}\n"
+                response += f"**Exclude паттерны:** {exclude_patterns}\n"
+            else:
+                response = f"❌ Ошибка создания пресета '{name}'"
+                
+            return [TextContent(type="text", text=response)]
+            
+        elif action == "details":
+            # Подробная информация о пресете
+            name = arguments.get("name")
+            if not name:
+                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' для получения деталей")]
+            
+            details = get_preset_details(name)
+            if not details:
+                return [TextContent(type="text", text=f"❌ Пресет '{name}' не найден")]
+            
+            response = f"# 🔍 Детали пресета: `{name}`\n\n"
+            response += f"**Описание:** {details['description']}\n\n"
+            
+            if details['include_patterns']:
+                response += "## ✅ Include patterns:\n"
+                for pattern in details['include_patterns']:
+                    response += f"- `{pattern}`\n"
+                response += "\n"
+            
+            if details['exclude_patterns']:
+                response += "## ❌ Exclude patterns:\n"
+                for pattern in details['exclude_patterns']:
+                    response += f"- `{pattern}`\n"
+                response += "\n"
+            
+            # Метаданные если есть
+            if 'created_at' in details:
+                response += f"**Создан:** {details['created_at']}\n"
+            if 'metadata' in details and details['metadata']:
+                response += f"**Метаданные:** {details['metadata']}\n"
+            
+            return [TextContent(type="text", text=response)]
+            
+        elif action == "delete":
+            # Удаление пресета
+            name = arguments.get("name")
+            if not name:
+                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' для удаления")]
+            
+            manager = get_preset_manager()
+            success = manager.delete_preset(name)
+            
+            if success:
+                response = f"✅ Пресет '{name}' успешно удален"
+            else:
+                response = f"❌ Ошибка удаления пресета '{name}' (возможно, это встроенный пресет или он не существует)"
+                
+            return [TextContent(type="text", text=response)]
+            
+        elif action == "export":
+            # Экспорт пресета
+            name = arguments.get("name")
+            file_path = arguments.get("file_path")
+            
+            if not name or not file_path:
+                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' и 'file_path' для экспорта")]
+            
+            manager = get_preset_manager()
+            success = manager.export_preset(name, file_path)
+            
+            if success:
+                response = f"✅ Пресет '{name}' экспортирован в {file_path}"
+            else:
+                response = f"❌ Ошибка экспорта пресета '{name}'"
+                
+            return [TextContent(type="text", text=response)]
+            
+        elif action == "import":
+            # Импорт пресета
+            file_path = arguments.get("file_path")
+            
+            if not file_path:
+                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'file_path' для импорта")]
+            
+            manager = get_preset_manager()
+            imported_name = manager.import_preset(file_path)
+            
+            if imported_name:
+                response = f"✅ Пресет '{imported_name}' успешно импортирован из {file_path}"
+            else:
+                response = f"❌ Ошибка импорта пресета из {file_path}"
+                
+            return [TextContent(type="text", text=response)]
+            
+        else:
+            return [TextContent(type="text", text=f"❌ Неизвестное действие: {action}. Доступные: list, create, details, delete, export, import")]
+        
+    except Exception as e:
+        error_msg = f"❌ Ошибка управления пресетами: {str(e)}"
+        logger.error(error_msg)
+        return [TextContent(type="text", text=error_msg)]
 
 async def code_review_tool(arguments: dict) -> list[TextContent]:
     """
@@ -283,7 +446,7 @@ if __name__ == "__main__":
 Профессиональный анализатор кода с шаблонами для различных типов анализа.
 
 🔗 Подробная документация: docs/help/quickstart.md
-🛠️ Инструменты: analyze_filters, get_context, get_templates, code_review
+🛠️ Инструменты: set_filters, get_context, get_templates, code_review
 
 Примеры использования и рабочие процессы смотрите в файле quickstart.md
 """

@@ -19,15 +19,32 @@ COMMON_PATH_SCHEMA = {
 COMMON_INCLUDE_PATTERNS_SCHEMA = {
     "type": "array",
     "items": {"type": "string"},
-    "description": "List of glob patterns for files to include (e.g., ['*.py', '*.rs', '*.js']). If empty, includes all files.",
+    "description": "List of glob patterns for files to include (e.g., ['*.py', '*.rs', '*.js']). If empty, includes all files. Can be overridden by preset_name parameter.",
     "default": []
 }
 
 COMMON_EXCLUDE_PATTERNS_SCHEMA = {
     "type": "array", 
     "items": {"type": "string"},
-    "description": "List of glob patterns for files to exclude (e.g., ['*.txt', 'node_modules/**', '*.log']). Applied after include patterns. Common exclusions: ['node_modules/**', '*.log', '*.tmp', 'dist/**', 'build/**'].",
+    "description": "List of glob patterns for files to exclude (e.g., ['*.txt', 'node_modules/**', '*.log']). Applied after include patterns. Common exclusions: ['node_modules/**', '*.log', '*.tmp', 'dist/**', 'build/**']. Can be overridden by preset_name parameter.",
     "default": []
+}
+
+COMMON_PRESET_NAME_SCHEMA = {
+    "type": "string",
+    "description": "Name of preset filter configuration to use. Available presets: 'default', 'aggressive', 'code-only', 'python-project', 'web-app', 'react-app', 'electron-app', plus any user-defined presets. When specified, overrides include_patterns and exclude_patterns unless merge_with_preset is true.",
+    "enum": ["default", "aggressive", "code-only", "python-project", "web-app", "react-app", "electron-app"]
+}
+
+COMMON_MERGE_WITH_PRESET_SCHEMA = {
+    "type": "boolean", 
+    "description": "If true and preset_name is specified, merges preset patterns with manually specified include_patterns and exclude_patterns. If false, preset completely overrides manual patterns.",
+    "default": False
+}
+
+COMMON_SAVE_AS_PRESET_SCHEMA = {
+    "type": "string",
+    "description": "If specified, saves the current filter configuration as a new preset with this name for future reuse."
 }
 
 COMMON_INCLUDE_PRIORITY_SCHEMA = {
@@ -122,7 +139,7 @@ def get_context_schema() -> Dict[str, Any]:
             },
             "auto_analyze": {
                 "type": "boolean",
-                "description": "Automatically run analyze_filters on the target directory after generating context. Provides additional insights about the analyzed codebase.",
+                "description": "Automatically run set_filters on the target directory after generating context. Provides additional insights about the analyzed codebase.",
                 "default": True
             }
         },
@@ -157,65 +174,57 @@ def get_context_schema() -> Dict[str, Any]:
         ]
     }
 
-def get_analyze_filters_schema() -> Dict[str, Any]:
+def get_set_filters_schema() -> Dict[str, Any]:
     """
-    Схема для инструмента analyze_filters
+    Схема для инструмента set_filters
     """
     return {
         "type": "object",
         "properties": {
             "path": COMMON_PATH_SCHEMA,
+            "preset_name": {
+                **COMMON_PRESET_NAME_SCHEMA,
+                "description": "Preset filter configuration name. If not specified, automatically detects project type. Available: python-project, web-app, react-app, electron-app, code-only, aggressive"
+            },
             "include_patterns": {
                 **COMMON_INCLUDE_PATTERNS_SCHEMA,
-                "description": "List of glob patterns for files to include (e.g., ['*.py', '*.rs', '*.js']). If empty, includes all files. Test different patterns to optimize selection."
+                "description": "Additional file inclusion patterns. Example: ['*.md', '*.txt']. Merged with preset if merge_with_preset=true"
             },
-            "exclude_patterns": COMMON_EXCLUDE_PATTERNS_SCHEMA,
-            "include_priority": COMMON_INCLUDE_PRIORITY_SCHEMA,
-            "follow_symlinks": COMMON_FOLLOW_SYMLINKS_SCHEMA,
-            "include_hidden": COMMON_INCLUDE_HIDDEN_SCHEMA,
-            "encoding": COMMON_ENCODING_SCHEMA,
-            "show_top_files": {
-                "type": "integer",
-                "description": "Number of largest files to show in detailed breakdown. Helps identify files that consume most tokens.",
-                "default": 10,
-                "minimum": 1,
-                "maximum": 50
+            "exclude_patterns": {
+                **COMMON_EXCLUDE_PATTERNS_SCHEMA,
+                "description": "Additional file exclusion patterns. Example: ['temp/**', '*.backup']. Merged with preset if merge_with_preset=true"
             },
-            "max_directory_depth": {
-                "type": "integer", 
-                "description": "Maximum depth for directory tree analysis. Deeper levels will be summarized to avoid overwhelming output.",
-                "default": 3,
-                "minimum": 1,
-                "maximum": 10
+            "merge_with_preset": {
+                **COMMON_MERGE_WITH_PRESET_SCHEMA,
+                "description": "Merge specified patterns with preset (true) or replace preset (false)"
             },
-            "min_file_size": {
-                "type": "integer",
-                "description": "Minimum file size in characters to include in analysis. Filters out tiny files that don't impact token count significantly.",
-                "default": 0,
-                "minimum": 0
-            },
-            "save_to_file": {
-                "type": "string",
-                "description": "Path to save the analysis results to a file. Relative paths automatically create versioned structure: analysis/YYYY-MM-DD/project-name/ with files named project-name-v1.N.filters.md. Absolute paths save directly to specified location."
+            "encoding": {
+                **COMMON_ENCODING_SCHEMA,
+                "description": "Token counting encoding: cl100k (GPT-4), p50k (Codex), gpt2 (GPT-3)"
             }
         },
         "examples": [
             {
-                "description": "Analyze Python project structure",
-                "path": "/path/to/project",
-                "include_patterns": ["*.py"],
-                "exclude_patterns": ["tests/**", "__pycache__/**", "*.pyc"]
+                "description": "Automatic filter setup (detects project type)",
+                "path": "/path/to/project"
             },
             {
-                "description": "Test web app filters",
+                "description": "Setup with specific preset",
                 "path": "/path/to/webapp",
-                "include_patterns": ["*.py", "*.js", "*.html", "*.css"],
-                "exclude_patterns": ["node_modules/**", "dist/**", "*.min.js", "*.min.css"]
+                "preset_name": "react-app"
             },
             {
-                "description": "Analyze all files with exclusions",
+                "description": "Preset + additional files",
                 "path": "/path/to/project",
-                "exclude_patterns": ["*.log", "*.tmp", ".git/**", "*.lock"]
+                "preset_name": "python-project",
+                "merge_with_preset": True,
+                "include_patterns": ["*.md", "*.txt"]
+            },
+            {
+                "description": "Fully custom filters",
+                "path": "/path/to/project",
+                "include_patterns": ["*.py", "*.js"],
+                "exclude_patterns": ["tests/**", "temp/**"]
             }
         ]
     }
@@ -235,6 +244,82 @@ def get_get_templates_schema() -> Dict[str, Any]:
         }
     }
 
+def get_manage_presets_schema() -> Dict[str, Any]:
+    """
+    Схема для инструмента manage_presets
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "description": "Action to perform with presets: 'list' - show all presets, 'create' - create new, 'details' - preset details, 'delete' - delete, 'export' - export to file, 'import' - import from file",
+                "enum": ["list", "create", "details", "delete", "export", "import"],
+                "default": "list"
+            },
+            "name": {
+                "type": "string",
+                "description": "Preset name. Required for: create, details, delete, export"
+            },
+            "include_patterns": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "File inclusion patterns (for create only). Example: ['*.py', '*.js']",
+                "default": []
+            },
+            "exclude_patterns": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "File exclusion patterns (for create only). Example: ['tests/**', 'node_modules/**']",
+                "default": []
+            },
+            "description": {
+                "type": "string",
+                "description": "Preset description (for create only)",
+                "default": ""
+            },
+            "file_path": {
+                "type": "string",
+                "description": "File path for export/import. Example: '/path/to/preset.json'"
+            }
+        },
+        "examples": [
+            {
+                "description": "List all available presets",
+                "action": "list"
+            },
+            {
+                "description": "Create new preset",
+                "action": "create",
+                "name": "my-web-app",
+                "include_patterns": ["*.js", "*.ts", "*.html", "*.css"],
+                "exclude_patterns": ["node_modules/**", "dist/**"],
+                "description": "My custom web app preset"
+            },
+            {
+                "description": "Get details of specific preset",
+                "action": "details",
+                "name": "python-project"
+            },
+            {
+                "description": "Delete user preset",
+                "action": "delete",
+                "name": "my-old-preset"
+            },
+            {
+                "description": "Export preset to file",
+                "action": "export",
+                "name": "my-preset",
+                "file_path": "/path/to/preset.json"
+            },
+            {
+                "description": "Import preset from file",
+                "action": "import",
+                "file_path": "/path/to/preset.json"
+            }
+        ]
+    }
+
 def get_code_review_schema() -> Dict[str, Any]:
     """
     Схема для инструмента code_review
@@ -245,26 +330,29 @@ def get_code_review_schema() -> Dict[str, Any]:
             "path": COMMON_PATH_SCHEMA,
             "template_name": {
                 **TEMPLATE_NAME_SCHEMA,
-                "description": "Template to use for AI analysis. Each template provides specialized analysis for different purposes.",
-                "default": "code-review"
+                "description": "Template to use for Neira analysis. Each template provides specialized analysis for different purposes.",
+                "enum": ["code-review", "security-audit", "documentation", "refactoring", "migration-guide", "api-documentation", "performance-analysis"]
             },
+            "preset_name": COMMON_PRESET_NAME_SCHEMA,
             "include_patterns": {
                 **COMMON_INCLUDE_PATTERNS_SCHEMA,
-                "description": "List of glob patterns for files to include (e.g., ['*.py', '*.js', '*.ts']). If empty, includes all relevant code files."
+                "description": "List of glob patterns for files to include (e.g., ['*.py', '*.js', '*.ts']). If empty, includes all relevant code files. Overridden by preset_name unless merge_with_preset is true."
             },
             "exclude_patterns": COMMON_EXCLUDE_PATTERNS_SCHEMA,
+            "merge_with_preset": COMMON_MERGE_WITH_PRESET_SCHEMA,
+            "save_as_preset": COMMON_SAVE_AS_PRESET_SCHEMA,
             "max_tokens": {
                 "type": "integer",
-                "description": "Maximum number of tokens to send to AI. If codebase exceeds this limit, aggressive filters will be applied automatically.",
                 "default": 1000000,
                 "minimum": 10000,
-                "maximum": 2000000
+                "maximum": 2000000,
+                "description": "Maximum number of tokens to send to Neira. If codebase exceeds this limit, aggressive filters will be applied automatically."
             },
-            "google_ai_model": {
+            "ai_model": {
                 "type": "string",
-                "description": "AI model to use for analysis. gemini-2.5-pro-preview provides the most detailed analysis.",
-                "default": "gemini-2.5-pro-preview-06-05",
-                "enum": ["gemini-2.5-pro-preview-06-05", "gemini-pro", "gemini-pro-vision"]
+                "description": "Neira model to use for analysis. neira-2.5-pro-preview provides the most detailed analysis.",
+                "default": "neira-2.5-pro-preview-06-05",
+                "enum": ["neira-2.5-pro-preview-06-05", "neira-pro", "neira-pro-vision"]
             }
         }
     }
@@ -272,8 +360,9 @@ def get_code_review_schema() -> Dict[str, Any]:
 # 📋 Маппинг инструментов к их схемам
 TOOL_SCHEMAS = {
     "get_context": get_context_schema,
-    "analyze_filters": get_analyze_filters_schema,
+    "set_filters": get_set_filters_schema,
     "get_templates": get_get_templates_schema,
+    "manage_presets": get_manage_presets_schema,
     "code_review": get_code_review_schema
 }
 
