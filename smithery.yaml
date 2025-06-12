@@ -4,9 +4,11 @@ startCommand:
   configSchema: {}
   commandFunction: |
     (config) => ({
-      command: "python",
-      args: ["src/code2prompt_mcp/main.py"],
-      env: {}
+      command: "uv",
+      args: ["run", "python", "-m", "src.neira_code_analyzer.main"],
+      env: {
+        "GOOGLE_AI_API_KEY": process.env.GOOGLE_AI_API_KEY
+      }
     })
 
 

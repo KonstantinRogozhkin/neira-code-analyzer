@@ -1,19 +1,20 @@
 [project]
-name = "code2prompt-mcp"
+name = "neira-code-analyzer"
 version = "0.1.0"
-description = "MCP server for Code2Prompt"
+description = "MCP server for Neira Code Analyzer - advanced codebase analysis with professional templates"
 authors = [
     { name = "Olivier D'Ancona", email = "olivier.dancona@master.hes-so.ch" },
 ]
 dependencies = [
-    "mcp>=1.4.1",
+    "mcp>=1.9.0",
     "httpx>=0.28.1",
-    "dotenv>=0.9.9",
     "colorlog>=6.9.0",
     "code2prompt-rs>=3.2.1",
+    "google-genai>=1.19.0",
+    "python-dotenv>=1.0.0",
 ]
 readme = "README.md"
-requires-python = ">= 3.8"
+requires-python = ">= 3.11"
 
 [build-system]
 requires = ["hatchling"]
@@ -22,10 +23,9 @@ build-backend = "hatchling.build"
 [tool.rye]
 managed = true
 dev-dependencies = []
-virtual = true
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/code2prompt_mcp"]
+packages = ["src/neira_code_analyzer"]

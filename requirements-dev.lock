@@ -9,48 +9,108 @@
 #   generate-hashes: false
 #   universal: false
 
+-e file:.
 annotated-types==0.7.0
     # via pydantic
 anyio==4.9.0
+    # via google-genai
     # via httpx
     # via mcp
     # via sse-starlette
     # via starlette
+authlib==1.6.0
+    # via fastmcp
+cachetools==5.5.2
+    # via google-auth
 certifi==2025.1.31
     # via httpcore
     # via httpx
+    # via requests
+cffi==1.17.1
+    # via cryptography
+charset-normalizer==3.4.2
+    # via requests
 click==8.1.8
+    # via typer
     # via uvicorn
 code2prompt-rs==3.2.1
+    # via neira-code-analyzer
 colorlog==6.9.0
+    # via neira-code-analyzer
+cryptography==45.0.4
+    # via authlib
 dotenv==0.9.9
+    # via neira-code-analyzer
+exceptiongroup==1.3.0
+    # via fastmcp
+fastmcp==2.8.0
+    # via neira-code-analyzer
+google-auth==2.40.3
+    # via google-genai
+google-genai==1.19.0
+    # via neira-code-analyzer
 h11==0.14.0
     # via httpcore
     # via uvicorn
 httpcore==1.0.7
     # via httpx
 httpx==0.28.1
+    # via fastmcp
+    # via google-genai
     # via mcp
+    # via neira-code-analyzer
 httpx-sse==0.4.0
     # via mcp
 idna==3.10
     # via anyio
     # via httpx
-mcp==1.4.1
+    # via requests
+markdown-it-py==3.0.0
+    # via rich
+mcp==1.9.3
+    # via fastmcp
+    # via neira-code-analyzer
+mdurl==0.1.2
+    # via markdown-it-py
+openapi-pydantic==0.5.1
+    # via fastmcp
 patchelf==0.17.2.2
     # via code2prompt-rs
 pip==25.0.1
     # via code2prompt-rs
+pyasn1==0.6.1
+    # via pyasn1-modules
+    # via rsa
+pyasn1-modules==0.4.2
+    # via google-auth
+pycparser==2.22
+    # via cffi
 pydantic==2.10.6
+    # via google-genai
     # via mcp
+    # via openapi-pydantic
     # via pydantic-settings
 pydantic-core==2.27.2
     # via pydantic
 pydantic-settings==2.8.1
     # via mcp
-python-dotenv==1.0.1
+pygments==2.19.1
+    # via rich
+python-dotenv==1.1.0
     # via dotenv
+    # via fastmcp
     # via pydantic-settings
+python-multipart==0.0.20
+    # via mcp
+requests==2.32.4
+    # via google-genai
+rich==14.0.0
+    # via fastmcp
+    # via typer
+rsa==4.9.1
+    # via google-auth
+shellingham==1.5.4
+    # via typer
 sniffio==1.3.1
     # via anyio
 sse-starlette==2.2.1
@@ -58,8 +118,16 @@ sse-starlette==2.2.1
 starlette==0.46.1
     # via mcp
     # via sse-starlette
+typer==0.16.0
+    # via fastmcp
 typing-extensions==4.12.2
+    # via google-genai
     # via pydantic
     # via pydantic-core
+    # via typer
+urllib3==2.4.0
+    # via requests
 uvicorn==0.34.0
     # via mcp
+websockets==15.0.1
+    # via google-genai

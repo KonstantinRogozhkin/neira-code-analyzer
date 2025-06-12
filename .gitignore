@@ -9,4 +9,14 @@ wheels/
 # venv
 .venv
 
-.env
+
+# SpecStory explanation file
+.specstory/*
+.specstory/history/
+# SpecStory explanation file
+.specstory/.what-is-this.md
+/docs/archive/
+docs/archive/
+
+analysis/
+analysis/*

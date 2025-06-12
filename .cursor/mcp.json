@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "neira-main": {
+      "command": "/Users/konstantin/.local/bin/uv",
+      "args": ["run", "--directory", "/Users/konstantin/Projects/neira-code-analyzer", "python", "-m", "src.neira_code_analyzer.main"],
+      "env": {
+        "GOOGLE_AI_API_KEY": "AIzaSyDEy6DjVsr7-gHJUYSLpKIphN61EdXHREw"
+      }
+    }
+  }
+}
