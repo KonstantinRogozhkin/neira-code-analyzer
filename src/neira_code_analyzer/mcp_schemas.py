@@ -8,6 +8,33 @@
 
 from typing import Dict, Any, List
 
+# 🎯 Динамическая генерация enum'ов для устранения дублирования
+
+def _get_available_presets() -> List[str]:
+    """
+    Динамически получает список доступных пресетов из FilterPresetManager
+    Устраняет дублирование хардкоженных enum списков
+    """
+    try:
+        from .filters import list_available_presets
+        return list(list_available_presets().keys())
+    except Exception:
+        # Fallback для случая ошибок
+        return ["default", "aggressive", "code-only", "python-project", "web-app", "react-app", "electron-app"]
+
+def _get_available_templates() -> List[str]:
+    """
+    Динамически получает список доступных шаблонов из TemplateManager
+    Устраняет дублирование хардкоженных enum списков
+    """
+    try:
+        from .template_manager import TemplateManager
+        manager = TemplateManager()
+        return manager.get_available_templates()
+    except Exception:
+        # Fallback для случая ошибок
+        return ["code-review", "security-audit", "documentation", "refactoring", "migration-guide", "api-documentation", "performance-analysis"]
+
 # 🎯 Общие схемы параметров для переиспользования
 
 COMMON_PATH_SCHEMA = {
@@ -30,11 +57,13 @@ COMMON_EXCLUDE_PATTERNS_SCHEMA = {
     "default": []
 }
 
-COMMON_PRESET_NAME_SCHEMA = {
-    "type": "string",
-    "description": "Name of preset filter configuration to use. Available presets: 'default', 'aggressive', 'code-only', 'python-project', 'web-app', 'react-app', 'electron-app', plus any user-defined presets. When specified, overrides include_patterns and exclude_patterns unless merge_with_preset is true.",
-    "enum": ["default", "aggressive", "code-only", "python-project", "web-app", "react-app", "electron-app"]
-}
+def _get_preset_name_schema() -> Dict[str, Any]:
+    """Динамически генерируемая схема для пресетов"""
+    return {
+        "type": "string",
+        "description": "Name of preset filter configuration to use. Available presets are loaded dynamically from FilterPresetManager. When specified, overrides include_patterns and exclude_patterns unless merge_with_preset is true.",
+        "enum": _get_available_presets()
+    }
 
 COMMON_MERGE_WITH_PRESET_SCHEMA = {
     "type": "boolean", 
@@ -72,11 +101,13 @@ COMMON_ENCODING_SCHEMA = {
     "enum": ["cl100k", "p50k", "gpt2", "o200k"]
 }
 
-TEMPLATE_NAME_SCHEMA = {
-    "type": "string",
-    "description": "Name of predefined template to use. Available options: 'code-review', 'security-audit', 'documentation', 'refactoring', 'migration-guide', 'api-documentation', 'performance-analysis'.",
-    "enum": ["code-review", "security-audit", "documentation", "refactoring", "migration-guide", "api-documentation", "performance-analysis"]
-}
+def _get_template_name_schema() -> Dict[str, Any]:
+    """Динамически генерируемая схема для шаблонов"""
+    return {
+        "type": "string",
+        "description": "Name of predefined template to use. Available options are loaded dynamically from TemplateManager.",
+        "enum": _get_available_templates()
+    }
 
 CUSTOM_TEMPLATE_SCHEMA = {
     "type": "string",
@@ -94,7 +125,7 @@ def get_context_schema() -> Dict[str, Any]:
         "properties": {
             "path": COMMON_PATH_SCHEMA,
             "template_name": {
-                **TEMPLATE_NAME_SCHEMA,
+                **_get_template_name_schema(),
                 "description": "Name of predefined template to use. Use this for quick access to professional templates. If specified, 'template' parameter is ignored."
             },
             "template": {
@@ -183,8 +214,8 @@ def get_set_filters_schema() -> Dict[str, Any]:
         "properties": {
             "path": COMMON_PATH_SCHEMA,
             "preset_name": {
-                **COMMON_PRESET_NAME_SCHEMA,
-                "description": "Preset filter configuration name. If not specified, automatically detects project type. Available: python-project, web-app, react-app, electron-app, code-only, aggressive"
+                **_get_preset_name_schema(),
+                "description": "Preset filter configuration name. If not specified, automatically detects project type. Available presets are loaded dynamically from FilterPresetManager"
             },
             "include_patterns": {
                 **COMMON_INCLUDE_PATTERNS_SCHEMA,
@@ -329,11 +360,11 @@ def get_analyze_schema() -> Dict[str, Any]:
         "properties": {
             "path": COMMON_PATH_SCHEMA,
             "template_name": {
-                **TEMPLATE_NAME_SCHEMA,
+                **_get_template_name_schema(),
                 "description": "Template to use for Neira analysis. Each template provides specialized analysis for different purposes. Examples: 'code-review' - детальный анализ кода, 'security-audit' - проверка безопасности, 'documentation' - создание документации, 'refactoring' - предложения по рефакторингу, 'performance-analysis' - анализ производительности.",
-                "enum": ["code-review", "security-audit", "documentation", "refactoring", "migration-guide", "api-documentation", "performance-analysis"]
+                "enum": _get_available_templates()
             },
-            "preset_name": COMMON_PRESET_NAME_SCHEMA,
+            "preset_name": _get_preset_name_schema(),
             "include_patterns": {
                 **COMMON_INCLUDE_PATTERNS_SCHEMA,
                 "description": "List of glob patterns for files to include (e.g., ['*.py', '*.js', '*.ts']). If empty, includes all relevant code files. Overridden by preset_name unless merge_with_preset is true."
