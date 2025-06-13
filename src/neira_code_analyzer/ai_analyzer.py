@@ -1,7 +1,7 @@
 """
 Neira анализатор для Neira Code Analyzer
 
-Модуль для интеграции с Neira сервисами и анализа кода.
+Модуль для интеграции с AI сервисами и анализа кода.
 """
 
 from typing import Optional, Dict, Any
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Константы для устранения "магических" значений
 DEFAULT_TEMPLATE_NAME = "code-review"
 DEFAULT_ENCODING = "cl100k"
-DEFAULT_MODEL = "neira-2.5-pro-preview-06-05"
+DEFAULT_MODEL = "gemini-2.5-pro-preview-06-05"
 
 class NeiraAnalyzer:
     """Анализатор кода с помощью Neira"""
@@ -29,9 +29,9 @@ class NeiraAnalyzer:
             from .ai_utils import generate_ai_review
             self._generate_ai_review_func = generate_ai_review
             self._ai_module_available = True
-            logger.info("Neira analyzer initialized with Neira module")
+            logger.info("Google AI analyzer initialized with Google AI module")
         except ImportError:
-            logger.warning("Neira analyzer initialized without Neira module")
+            logger.warning("Google AI analyzer initialized without Google AI module")
             self._generate_ai_review_func = None
             
         # Инициализируем context_generator через DI контейнер
@@ -49,7 +49,7 @@ class NeiraAnalyzer:
         
         Args:
             prompt_text: Промпт с кодом для анализа
-            model_name: Название модели Neira
+            model_name: Название модели Google AI/Gemini
             
         Returns:
             str: Neira анализ кода
@@ -57,22 +57,22 @@ class NeiraAnalyzer:
         Raises:
             ImportError: Если ai модуль недоступен
             ValueError: Если API ключ не установлен
-            Exception: При ошибке взаимодействия с Neira
+            Exception: При ошибке взаимодействия с AI
         """
         if not self._ai_module_available:
             raise ImportError("Модуль ai недоступен. Убедитесь, что файл ai.py существует в src/neira_code_analyzer/ и установлены зависимости")
         
         try:
-            logger.info(f"Вызываем Neira анализ с моделью {model_name}")
+            logger.info(f"Вызываем Google AI анализ с моделью {model_name}")
             result = self._generate_ai_review_func(prompt_text, model_name)
             
             if result and result.strip():
                 return result.strip()
             else:
-                raise Exception("Получен пустой ответ от Neira")
+                raise Exception("Получен пустой ответ от Google AI")
                 
         except Exception as e:
-            logger.error(f"Ошибка Neira анализа: {e}")
+            logger.error(f"Ошибка Google AI анализа: {e}")
             raise
 
     async def perform_code_review(self, path: str, template_name: str = DEFAULT_TEMPLATE_NAME,
@@ -122,7 +122,7 @@ class NeiraAnalyzer:
         if not self.context_generator:
             return "❌ **КРИТИЧЕСКАЯ ОШИБКА:** Context generator не инициализирован. Перезапустите сервер.\n"
         
-        response = f"# 🔍 Автоматический Neira анализ через Neira\n\n"
+        response = f"# 🔍 Автоматический анализ кода через Neira\n\n"
         response += f"**🎯 Шаблон анализа:** {template_name}\n\n"
         
         # Добавляем информацию о пресете если используется
@@ -430,7 +430,7 @@ class NeiraAnalyzer:
             response += f"**🔄 Отправляем на анализ в {ai_model}...**\n"
             response += f"**📝 Размер промпта:** {len(code_content):,} символов\n\n"
             
-            # Вызываем Neira анализ
+            # Вызываем Google AI анализ
             ai_analysis = self.generate_ai_review(code_content, ai_model)
             
             if ai_analysis and ai_analysis.strip():
@@ -443,7 +443,7 @@ class NeiraAnalyzer:
                 
         except Exception as ai_error:
             response += f"❌ **ОШИБКА Neira:** {str(ai_error)}\n"
-            logger.error(f"Neira analysis error: {ai_error}")
+            logger.error(f"Google AI analysis error: {ai_error}")
             return "", response
 
     def _save_results(self, path: str, ai_analysis: str, code_content: str,
@@ -507,7 +507,7 @@ class NeiraAnalyzer:
         saved_files = []
         
         try:
-            # 1. Сохраняем Neira анализ
+            # 1. Сохраняем Google AI анализ
             analyze_filename = f"{project_name}.analyze.md"
             analyze_save_path = project_folder / analyze_filename
             

@@ -45,20 +45,19 @@ def load_env_file():
         print(f"⚠️ Ошибка при загрузке .env файла: {e}")
         return False
 
-# Автоматически загружаем .env при импорте модуля
-load_env_file()
+# load_env_file() убран из автоматического импорта - теперь вызывается явно при старте сервера
 
 
-def generate_ai_review(prompt_text: str, model_name: str = "neira-2.5-pro-preview-06-05") -> str:
+def generate_ai_review(prompt_text: str, model_name: str = "gemini-2.5-pro-preview-06-05") -> str:
     """
-    Асинхронная функция для генерации Neira анализа кода.
+    Функция для генерации Google AI анализа кода.
     
     Args:
         prompt_text: Текст промпта с кодом для анализа
-        model_name: Название модели 
+        model_name: Название модели Google AI/Gemini
         
     Returns:
-        str: Результат анализа от Neira
+        str: Результат анализа от Google AI
         
     Raises:
         ValueError: Если API ключ не установлен
@@ -67,7 +66,7 @@ def generate_ai_review(prompt_text: str, model_name: str = "neira-2.5-pro-previe
     # Используем центральную проверку API ключа
     api_key = check_api_key()
     
-    # Создаем клиент для Neira Gen API
+    # Создаем клиент для Google Gen AI API
     client = genai.Client(api_key=api_key)
 
     contents = types.Content(
@@ -91,10 +90,10 @@ def generate_ai_review(prompt_text: str, model_name: str = "neira-2.5-pro-previe
         if response and response.text:
             return response.text.strip()
         else:
-            raise Exception("Получен пустой ответ от Neira API")
+            raise Exception("Получен пустой ответ от Google AI API")
             
     except Exception as e:
-        raise Exception(f"Ошибка при вызове Neira API: {str(e)}")
+        raise Exception(f"Ошибка при вызове Google AI API: {str(e)}")
 
 
 def check_api_key():
@@ -107,20 +106,23 @@ def check_api_key():
     Raises:
         ValueError: Если API ключ не установлен
     """
-    api_key = os.environ.get("NEIRA_API_KEY")
+    # Пытаемся получить API ключ из различных переменных окружения
+    api_key = (os.environ.get("GOOGLE_API_KEY") or 
+               os.environ.get("GEMINI_API_KEY") or 
+               os.environ.get("NEIRA_API_KEY"))  # Оставляем для обратной совместимости
     
     if not api_key:
         raise ValueError(
-            "КРИТИЧЕСКАЯ ОШИБКА: переменная окружения NEIRA_API_KEY не установлена!\n\n"
+            "КРИТИЧЕСКАЯ ОШИБКА: API ключ Google AI не найден!\n\n"
             "🔑 Как получить и установить API ключ:\n"
-            "1. Получите бесплатный API ключ от Neira API\n"  
+            "1. Получите бесплатный API ключ от Google AI Studio: https://ai.google.dev/\n"  
             "2. Установите API ключ одним из способов:\n"
-            "   📄 В .env файле: NEIRA_API_KEY=ваш_ключ\n"
+            "   📄 В .env файле: GOOGLE_API_KEY=ваш_ключ\n"
             "   🔧 Переменная окружения:\n"
-            "      • Linux/macOS: export NEIRA_API_KEY='ваш_ключ'\n"
-            "      • Windows: set NEIRA_API_KEY=ваш_ключ\n"
-            "      • PowerShell: $env:NEIRA_API_KEY='ваш_ключ'\n\n"
-            "💡 Рекомендуется использовать .env файл в корне проекта."
+            "      • Linux/macOS: export GOOGLE_API_KEY='ваш_ключ'\n"
+            "      • Windows: set GOOGLE_API_KEY=ваш_ключ\n"
+            "      • PowerShell: $env:GOOGLE_API_KEY='ваш_ключ'\n\n"
+            "💡 Поддерживаются также: GEMINI_API_KEY, NEIRA_API_KEY"
         )
     
     return api_key 
