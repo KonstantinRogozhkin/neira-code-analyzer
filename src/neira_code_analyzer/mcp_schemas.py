@@ -357,13 +357,97 @@ def get_analyze_schema() -> Dict[str, Any]:
         }
     }
 
+def get_gen_docs_schema() -> Dict[str, Any]:
+    """
+    Схема для инструмента gen_docs - автоматическая генерация и обновление документации
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "path": COMMON_PATH_SCHEMA,
+            "docs_structure": {
+                "type": "string",
+                "description": "Target documentation structure. 'standard' creates docs/ with changelog, guides, help folders. 'minimal' creates basic README updates only.",
+                "enum": ["standard", "minimal"],
+                "default": "standard"
+            },
+            "scan_depth": {
+                "type": "integer",
+                "description": "How deep to scan for documentation files to process (in directory levels). Higher values scan more files but take longer.",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3
+            },
+            "max_file_size": {
+                "type": "integer", 
+                "description": "Maximum size of markdown files to process (in lines). Files larger than this will be archived or compressed.",
+                "minimum": 50,
+                "maximum": 1000,
+                "default": 400
+            },
+            "archive_processed": {
+                "type": "boolean",
+                "description": "Whether to move processed files to docs/archive/ after extracting knowledge. Recommended for keeping the docs clean.",
+                "default": True
+            },
+            "update_changelog": {
+                "type": "boolean",
+                "description": "Automatically update CHANGELOG.md from git commits and processed files.",
+                "default": True
+            },
+            "git_scan_days": {
+                "type": "integer",
+                "description": "How many days back to scan git history for changes to include in documentation.",
+                "minimum": 1,
+                "maximum": 90,
+                "default": 14
+            },
+            "compress_guides": {
+                "type": "boolean",
+                "description": "Compress guides to meet the target length (≤150 lines) while preserving essential information.",
+                "default": True
+            },
+            "target_guide_length": {
+                "type": "integer",
+                "description": "Target maximum length for guides in lines. Guides longer than this will be compressed.",
+                "minimum": 50,
+                "maximum": 300,
+                "default": 150
+            }
+        },
+        "examples": [
+            {
+                "description": "Standard documentation generation",
+                "path": "/path/to/project",
+                "docs_structure": "standard",
+                "archive_processed": True
+            },
+            {
+                "description": "Minimal docs update with changelog",
+                "path": "/path/to/project", 
+                "docs_structure": "minimal",
+                "update_changelog": True,
+                "git_scan_days": 7
+            },
+            {
+                "description": "Deep scan with compression",
+                "path": "/path/to/project",
+                "scan_depth": 4,
+                "max_file_size": 300,
+                "compress_guides": True,
+                "target_guide_length": 100
+            }
+        ]
+    }
+
 # 📋 Маппинг инструментов к их схемам
 TOOL_SCHEMAS = {
     "get_context": get_context_schema,
     "set_filters": get_set_filters_schema,
     "get_templates": get_get_templates_schema,
     "manage_presets": get_manage_presets_schema,
-    "get_analyze": get_analyze_schema
+    "get_analyze": get_analyze_schema,
+    "gen_docs": get_gen_docs_schema
 }
 
 def get_tool_schema(tool_name: str) -> Dict[str, Any]:
