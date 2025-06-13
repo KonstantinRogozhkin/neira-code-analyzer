@@ -31,8 +31,7 @@ WORKDIR /app
 
 # Копируем виртуальное окружение и код из builder стадии
 COPY --from=builder /app/.venv /app/.venv
-COPY --chown=appuser:appuser src ./src
-COPY --chown=appuser:appuser templates ./templates
+COPY --chown=appuser:appuser . .
 
 # Активируем виртуальное окружение
 ENV PATH="/app/.venv/bin:$PATH"
@@ -40,7 +39,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Переключаемся на непривилегированного пользователя
 USER appuser
 
-# Устанавливаем PYTHONPATH для корректного импорта модулей
-ENV PYTHONPATH="/app/src:$PYTHONPATH"
+# Устанавливаем пакет neira_code_analyzer правильным способом
+RUN pip install --no-deps -e .
 
-CMD ["python", "src/neira_code_analyzer/main.py"]
+CMD ["python", "-m", "neira_code_analyzer.main"]
