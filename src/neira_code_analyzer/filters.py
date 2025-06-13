@@ -53,6 +53,12 @@ DEFAULT_EXCLUDES: List[str] = [
     # Lock-файлы менеджеров пакетов (очень большие)
     "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "Pipfile.lock",
     
+    # Дополнительные кэши инструментов разработки (Quick Performance Win)
+    ".mypy_cache/**", ".pytest_cache/**", ".tox/**", ".ruff_cache/**",
+    
+    # Специфичные для IDE и окружений файлы
+    "nbproject/**", "*.swp", "*.swo",
+    
     # Специфичные для Electron/Tauri артефакты сборки
     "src-tauri/target/**", "**/src-tauri/target/**",
     
@@ -80,7 +86,7 @@ DEFAULT_EXCLUDES: List[str] = [
     "playwright-report/index.html", "**/playwright-report/index.html",
     "*/playwright-report/index.html",
     
-    # Кэши сборки и временные папки
+    # Кэши сборки и временные папки  
     "/.build-cache/", "/.cache/", "/cache/", "/caches/",
     "/.next/", "/.nuxt/", "/.output/", "/.vercel/", "/.netlify/",
     "/.turbo/", "/.parcel-cache/", "/.swc/", "/.vite/", "/.rollup.cache/",
@@ -91,6 +97,11 @@ DEFAULT_EXCLUDES: List[str] = [
     "/DerivedData/", "/Pods/",
     "/Library/", "/Temp/", "/Binaries/", "/Intermediate/", "/Saved/",
     "/tmp/", "/temp/", "/temporary/",
+    
+    # Quick Performance Win: дополнительные кэши JS инструментов
+    "/.nuxt/", ".nuxt/**", 
+    "/.vite/", ".vite/**",
+    "/.rollup.cache/", ".rollup.cache/**",
 ]
 
 # Агрессивные исключения для code review (когда нужно сократить токены)
@@ -320,6 +331,30 @@ class FilterPresetManager:
         if not preset:
             return False
         
+        # БЕЗОПАСНОСТЬ: Проверяем что file_path находится в разрешенной зоне
+        try:
+            file_path_resolved = Path(file_path).resolve()
+            # Разрешаем только в поддиректории presets/ или в текущей директории проекта
+            allowed_dirs = [
+                Path.cwd().resolve(),  # Текущая директория
+                Path.cwd().resolve() / "presets",  # Поддиректория presets
+                Path(self.presets_dir).resolve() if self.presets_dir else None
+            ]
+            allowed_dirs = [d for d in allowed_dirs if d is not None]
+            
+            is_allowed = any(
+                str(file_path_resolved).startswith(str(allowed)) 
+                for allowed in allowed_dirs
+            )
+            
+            if not is_allowed:
+                logger.error(f"Небезопасный путь для экспорта: {file_path}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка проверки пути: {e}")
+            return False
+        
         try:
             export_data = {
                 "preset_name": name,
@@ -328,7 +363,10 @@ class FilterPresetManager:
                 "neira_version": "1.0"
             }
             
-            with open(file_path, 'w', encoding='utf-8') as f:
+            # Создаем директорию если не существует
+            file_path_resolved.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(file_path_resolved, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
@@ -345,8 +383,32 @@ class FilterPresetManager:
         Returns:
             str: Название импортированного пресета или None при ошибке
         """
+        # БЕЗОПАСНОСТЬ: Проверяем что file_path находится в разрешенной зоне
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            file_path_resolved = Path(file_path).resolve()
+            # Разрешаем только в поддиректории presets/ или в текущей директории проекта
+            allowed_dirs = [
+                Path.cwd().resolve(),  # Текущая директория
+                Path.cwd().resolve() / "presets",  # Поддиректория presets
+                Path(self.presets_dir).resolve() if self.presets_dir else None
+            ]
+            allowed_dirs = [d for d in allowed_dirs if d is not None]
+            
+            is_allowed = any(
+                str(file_path_resolved).startswith(str(allowed)) 
+                for allowed in allowed_dirs
+            )
+            
+            if not is_allowed:
+                logger.error(f"Небезопасный путь для импорта: {file_path}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Ошибка проверки пути: {e}")
+            return None
+        
+        try:
+            with open(file_path_resolved, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
             preset_name = data.get("preset_name")
@@ -356,10 +418,16 @@ class FilterPresetManager:
                 logger.error("Неверный формат файла пресета")
                 return None
             
+            # БЕЗОПАСНОСТЬ: Проверяем структуру пресета
+            required_keys = {"include_patterns", "exclude_patterns", "description"}
+            if not all(key in preset_config for key in required_keys):
+                logger.error("Неполная структура пресета")
+                return None
+            
             # Добавляем метаданные об импорте
             preset_config["metadata"] = preset_config.get("metadata", {})
             preset_config["metadata"]["imported_at"] = datetime.now().isoformat()
-            preset_config["metadata"]["imported_from"] = file_path
+            preset_config["metadata"]["imported_from"] = str(file_path_resolved)
             
             self._user_presets[preset_name] = preset_config
             

@@ -47,44 +47,7 @@ DEFAULT_INCLUDE_PATTERNS = [
 ]
 
 # Глобальные исключения для всех типов проектов (оптимизация производительности)
-ENHANCED_EXCLUDE_PATTERNS_BASE = [
-    # Python кэш и временные файлы
-    '__pycache__/**', '*.pyc', '*.pyo', '*.pyd', '.Python',
-    '*.egg-info/**', 'dist/**', 'build/**', '*.whl',
-    '.pytest_cache/**', '.coverage', 'htmlcov/**',
-    # Node.js
-    'node_modules/**', 'npm-debug.log*', 'yarn-debug.log*', 'yarn-error.log*',
-    # Системные и IDE файлы
-    '.DS_Store', '.DS_Store?', '._*', '.Spotlight-V100', '.Trashes',
-    'ehthumbs.db', 'Thumbs.db',
-    # Git и VCS
-    '.git/**', '.svn/**', '.hg/**', '.bzr/**',
-    # IDE и редакторы
-    '.vscode/**', '.idea/**', '*.swp', '*.swo', '*~',
-    '.vim/**', '.emacs.d/**',
-    # Виртуальные окружения
-    'venv/**', '.venv/**', 'env/**', '.env/**',
-    'virtualenv/**', '.virtualenv/**',
-    # Логи и временные файлы
-    '*.log', '*.tmp', '*.temp', '*.cache', '*.lock',
-    'tmp/**', 'temp/**', '.tmp/**', '.temp/**',
-    # Бинарные и медиа файлы (потребляют много токенов)
-    '*.exe', '*.dll', '*.so', '*.dylib', '*.app',
-    '*.png', '*.jpg', '*.jpeg', '*.gif', '*.bmp', '*.svg', '*.ico', '*.icns',
-    '*.mp3', '*.mp4', '*.avi', '*.mov', '*.wmv', '*.flv',
-    '*.pdf', '*.doc', '*.docx', '*.xls', '*.xlsx', '*.ppt', '*.pptx',
-    # Минифицированные файлы
-    '*.min.js', '*.min.css',
-    # Базы данных
-    '*.db', '*.sqlite', '*.sqlite3',
-    # Webpack и сборки
-    '.webpack/**', 'webpack.config.js',
-    # TypeScript build info
-    '*.tsbuildinfo',
-    # Тесты отчеты
-    'test-results/**', 'coverage/**', 'junit.xml',
-    'playwright-report/**', '.nyc_output/**'
-]
+# ENHANCED_EXCLUDE_PATTERNS_BASE удален - используем централизованный источник из filters.py
 
 @dataclass
 class ContextConfig:
@@ -477,7 +440,7 @@ class ContextGenerator:
                 self.total_characters = len(result.prompt)
                 self.total_lines = result.prompt.count('\n')
                 # ИСПРАВЛЕНИЕ: Честно указываем что детальная статистика недоступна
-                self.total_files = 0  # Неизвестно из code2prompt-rs
+                self.total_files = None  # Неизвестно из code2prompt-rs - используем None
                 self.top_files_by_size = []
                 self.file_type_stats = {}
                 self.has_detailed_stats = False  # Всегда False - детальных данных нет
@@ -709,12 +672,16 @@ class ContextGenerator:
                 response += "---\n\n"
             
             response += f"**🎯 Общие токены:** {stats.total_tokens:,}\n"
-            response += f"**📁 Всего файлов:** {stats.total_files:,}\n"
+            # Выводим количество файлов только если оно известно
+            if stats.total_files is not None:
+                response += f"**📁 Всего файлов:** {stats.total_files:,}\n"
+            else:
+                response += f"**📁 Всего файлов:** *(неизвестно - детальная статистика недоступна)*\n"
             response += f"**📏 Всего символов:** {stats.total_characters:,}\n"
             response += f"**🔢 Всего строк:** {stats.total_lines:,}\n\n"
             
             # Топ файлов по размеру
-            if stats.top_files_by_size:
+            if stats.has_detailed_stats and stats.top_files_by_size:
                 response += f"## 🔝 Топ-{min(show_top_files, len(stats.top_files_by_size))} файлов по размеру\n\n"
                 for i, file_info in enumerate(stats.top_files_by_size[:show_top_files], 1):
                     response += f"{i}. **{file_info.file_path}**\n"
@@ -723,7 +690,7 @@ class ContextGenerator:
                     response += f"   - Строки: {file_info.lines:,}\n\n"
             
             # Статистика по расширениям
-            if stats.file_type_stats:
+            if stats.has_detailed_stats and stats.file_type_stats:
                 response += "## 📋 Статистика по типам файлов\n\n"
                 response += "| Расширение | Файлы | Токены | Символы | Строки |\n"
                 response += "|------------|-------|--------|---------|--------|\n"
@@ -744,7 +711,7 @@ class ContextGenerator:
                 response += "**✅ Решение:** используйте базовые рекомендации и проверяйте результаты через обычные инструменты анализа кода.\n\n"
             
             # Проактивные рекомендации по оптимизации (Quick Performance Win)
-            if hasattr(stats, 'file_type_stats') and stats.file_type_stats:
+            if stats.has_detailed_stats:
                 response += self._generate_optimization_recommendations(
                     stats, include_patterns, exclude_patterns, path
                 )
@@ -805,7 +772,7 @@ class ContextGenerator:
             # Возвращаем структурированный результат
             return AnalysisResult(
                 total_tokens=stats.total_tokens,
-                total_files=stats.total_files,
+                total_files=stats.total_files if stats.total_files is not None else 0,  # Конвертируем None в 0 для совместимости
                 markdown_report=response,
                 file_stats={
                     'total_characters': stats.total_characters,
@@ -1003,7 +970,7 @@ class ContextGenerator:
             response += "```bash\n"
             response += "# Анализ с сохраненными фильтрами\n"
             response += "get_context --load-project-filters\n"
-            response += "code_review --load-project-filters\n"
+            response += "get_analyze --load-project-filters\n"
             response += "```\n\n"
             
             if config_saved:
@@ -1095,15 +1062,17 @@ class ContextGenerator:
         """Создает объект Code2Prompt с расширенными возможностями из code2prompt-rs"""
         try:
             from code2prompt_rs import Code2Prompt
+            from .filters import get_default_excludes
             
-            # 🚀 PERFORMANCE WIN: Используем предкомпилированные константы вместо создания списков
+            # 🚀 PERFORMANCE WIN: Используем централизованный источник фильтров
             
             # Используем предкомпилированные паттерны включения если не указаны
             if not include_patterns:
                 include_patterns = DEFAULT_INCLUDE_PATTERNS
             
-            # Объединяем предкомпилированные enhanced patterns с пользовательскими exclude patterns
-            enhanced_exclude_patterns = ENHANCED_EXCLUDE_PATTERNS_BASE + (exclude_patterns or [])
+            # Объединяем централизованные default excludes с пользовательскими exclude patterns
+            default_excludes = get_default_excludes()
+            enhanced_exclude_patterns = default_excludes + (exclude_patterns or [])
             
             # Извлекаем дополнительные опции из kwargs
             line_numbers = kwargs.get('line_numbers', False)
