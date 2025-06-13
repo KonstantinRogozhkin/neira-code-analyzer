@@ -3,6 +3,15 @@
 Скрипт для проверки импортов модулей
 """
 
+# Список модулей для проверки: (путь_модуля, описание)
+MODULES_TO_TEST = [
+    ("mcp", "Model Context Protocol"),
+    ("src.neira_code_analyzer.main", "Основной модуль MCP сервера"),
+    ("src.neira_code_analyzer.context_generator", "Генератор контекста"),
+    ("src.neira_code_analyzer.ai_analyzer", "AI анализатор"),
+    ("src.neira_code_analyzer.filters", "Система фильтров")
+]
+
 def test_import(module_path: str, description: str) -> bool:
     """
     Проверяет возможность импорта модуля
@@ -26,22 +35,10 @@ def main():
     """Основная функция для проверки всех модулей"""
     print("🔍 Проверка импортов модулей neira-code-analyzer...\n")
     
-    # Список модулей для проверки: (путь_модуля, описание)
-    modules_to_test = [
-        ("mcp", "Model Context Protocol"),
-        ("src.neira_code_analyzer.main", "Основной модуль MCP сервера"),
-        ("src.neira_code_analyzer.context_generator", "Генератор контекста"),
-        ("src.neira_code_analyzer.ai_analyzer", "AI анализатор"),
-        ("src.neira_code_analyzer.filters", "Система фильтров")
-    ]
-    
-    # Проверяем все модули и считаем результаты
-    successful_imports = 0
-    total_imports = len(modules_to_test)
-    
-    for module_path, description in modules_to_test:
-        if test_import(module_path, description):
-            successful_imports += 1
+    # Используем sum() для более лаконичного подсчета успешных импортов
+    results = [test_import(path, desc) for path, desc in MODULES_TO_TEST]
+    successful_imports = sum(results)
+    total_imports = len(MODULES_TO_TEST)
     
     # Выводим итоговую статистику
     print(f"\n📊 Результат: {successful_imports}/{total_imports} модулей импортированы успешно")

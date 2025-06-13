@@ -53,6 +53,21 @@ from .mcp_schemas import get_tool_schema
 # Создаем MCP сервер
 app = Server("neira-code-analyzer")
 
+# Реестр инструментов для декоратора
+TOOL_HANDLERS = {}
+
+def tool_handler(name: str):
+    """
+    Декоратор для регистрации обработчиков инструментов
+    
+    Args:
+        name: Название инструмента для регистрации
+    """
+    def decorator(func):
+        TOOL_HANDLERS[name] = func
+        return func
+    return decorator
+
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     """
@@ -123,7 +138,7 @@ async def list_tools() -> list[Tool]:
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     """
-    Обработчик вызовов инструментов MCP.
+    Обработчик вызовов инструментов MCP с декоративной регистрацией.
     
     Args:
         name: Название инструмента для вызова
@@ -135,22 +150,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     Raises:
         ValueError: Если инструмент не найден
     """
-    # Словарь-диспетчер для масштабируемости
-    tool_handlers = {
-        "get_context": get_context_tool,
-        "set_filters": set_filters_tool,
-        "get_templates": get_templates_tool,
-        "manage_presets": manage_presets_tool,
-        "get_analyze": get_analyze_tool,
-        "gen_docs": gen_docs_tool
-    }
-    
-    handler = tool_handlers.get(name)
+    handler = TOOL_HANDLERS.get(name)
     if handler:
         return await handler(arguments)
     else:
         raise ValueError(f"Unknown tool: {name}")
 
+@tool_handler("get_context")
 async def get_context_tool(arguments: dict) -> list[TextContent]:
     """
     Генерирует контекстные промпты из кодовых баз используя code2prompt-rs.
@@ -171,6 +177,7 @@ async def get_context_tool(arguments: dict) -> list[TextContent]:
     # Перенаправляем вызов на реализацию в context_generator
     return await context_generator.get_context(arguments)
 
+@tool_handler("set_filters")
 async def set_filters_tool(arguments: dict) -> list[TextContent]:
     """
     Автоматически подбирает оптимальные фильтры для проекта и сохраняет их.
@@ -207,6 +214,7 @@ async def set_filters_tool(arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=result.error_message or "Unknown error")]
 
 
+@tool_handler("get_templates")
 async def get_templates_tool(arguments: dict) -> list[TextContent]:
     """
     Получает краткий список доступных шаблонов для анализа кода.
@@ -236,6 +244,7 @@ async def get_templates_tool(arguments: dict) -> list[TextContent]:
         logger.error(f"Error getting templates: {e}")
         return [TextContent(type="text", text=f"❌ Ошибка при получении шаблонов: {str(e)}")]
 
+@tool_handler("manage_presets")
 async def manage_presets_tool(arguments: dict) -> list[TextContent]:
     """
     Управление пресетами фильтров: просмотр, создание, удаление, экспорт/импорт
@@ -261,6 +270,7 @@ async def manage_presets_tool(arguments: dict) -> list[TextContent]:
         logger.error(error_msg)
         return [TextContent(type="text", text=error_msg)]
 
+@tool_handler("get_analyze")
 async def get_analyze_tool(arguments: dict) -> list[TextContent]:
     """
     Автоматический анализ кода через Neira
@@ -289,6 +299,7 @@ async def get_analyze_tool(arguments: dict) -> list[TextContent]:
         logger.error(f"Error in code review tool: {e}")
         return [TextContent(type="text", text=f"❌ КРИТИЧЕСКАЯ ОШИБКА: {str(e)}")]
 
+@tool_handler("gen_docs")
 async def gen_docs_tool(arguments: dict) -> list[TextContent]:
     """
     Автоматическая генерация и обновление документации проекта

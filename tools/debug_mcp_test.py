@@ -33,7 +33,31 @@ TOOLS_REQUEST = {
     "params": {}
 }
 
+# Команда для запуска MCP сервера
+SERVER_START_COMMAND = ("uv", "run", "python", "-m", "src.neira_code_analyzer.main")
+
 DEFAULT_TIMEOUT = 10.0
+
+async def _validate_mcp_response(response: Optional[Dict[str, Any]], description: str) -> bool:
+    """
+    Валидирует ответ от MCP сервера
+    
+    Args:
+        response: Ответ от сервера
+        description: Описание операции для логирования
+        
+    Returns:
+        bool: True если ответ валиден
+    """
+    if not response:
+        return False
+    if "error" in response:
+        print(f"❌ Ошибка в '{description}': {response.get('error', 'неизвестная ошибка')}")
+        return False
+    if "result" not in response:
+        print(f"❌ Отсутствует 'result' в ответе '{description}'")
+        return False
+    return True
 
 async def send_mcp_request(process: asyncio.subprocess.Process, 
                           request_data: Dict[str, Any], 
@@ -88,28 +112,23 @@ def _build_tools_request() -> Dict[str, Any]:
 
 async def _start_mcp_server() -> Optional[asyncio.subprocess.Process]:
     """
-    Запускает MCP сервер используя общую функцию из main.py
-    
-    ИСПРАВЛЕНО: Убрано дублирование логики запуска сервера.
-    Теперь используется та же логика, что и в main.py
+    Запускает MCP сервер используя константу SERVER_START_COMMAND
     
     Returns:
         Процесс сервера или None при ошибке
     """
     try:
-        print("🚀 Запуск MCP сервера через общую функцию...")
+        print("🚀 Запуск MCP сервера...")
         
-        # Используем тот же подход что и в tools/debug_main.py
-        # Избегая дублирования собственной логики запуска
+        # Используем константу для консистентности
         process = await asyncio.create_subprocess_exec(
-            "uv", "run", "python", "-m", "src.neira_code_analyzer.main",
+            *SERVER_START_COMMAND,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
         
         print(f"✅ Сервер запущен (PID: {process.pid})")
-        print("💡 Используется общая функция запуска для консистентности")
         return process
         
     except Exception as e:
@@ -127,16 +146,12 @@ async def _test_initialization(process: asyncio.subprocess.Process) -> bool:
     init_request = _build_init_request()
     init_response = await send_mcp_request(process, init_request)
     
-    if not init_response:
+    if not await _validate_mcp_response(init_response, "Инициализация"):
         return False
         
-    if "result" in init_response:
-        print("✅ Инициализация успешна")
-        print(f"   Версия протокола: {init_response['result'].get('protocolVersion', 'неизвестно')}")
-        return True
-    else:
-        print(f"❌ Ошибка инициализации: {init_response.get('error', 'неизвестная ошибка')}")
-        return False
+    print("✅ Инициализация успешна")
+    print(f"   Версия протокола: {init_response['result'].get('protocolVersion', 'неизвестно')}")
+    return True
 
 async def _test_tools_list(process: asyncio.subprocess.Process) -> bool:
     """
@@ -149,17 +164,17 @@ async def _test_tools_list(process: asyncio.subprocess.Process) -> bool:
     tools_request = _build_tools_request()
     tools_response = await send_mcp_request(process, tools_request)
     
-    if not tools_response:
+    if not await _validate_mcp_response(tools_response, "Получение списка инструментов"):
         return False
         
-    if "result" in tools_response and "tools" in tools_response["result"]:
+    if "tools" in tools_response["result"]:
         tools = tools_response["result"]["tools"]
         print(f"✅ Получен список из {len(tools)} инструментов:")
         for tool in tools:
             print(f"   - {tool.get('name', 'unnamed')}: {tool.get('description', 'без описания')}")
         return True
     else:
-        print(f"❌ Ошибка получения инструментов: {tools_response.get('error', 'неизвестная ошибка')}")
+        print("❌ Отсутствует поле 'tools' в результате")
         return False
 
 async def _cleanup_server(process: asyncio.subprocess.Process) -> None:
