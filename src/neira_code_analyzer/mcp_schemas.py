@@ -8,38 +8,49 @@
 
 from typing import Dict, Any, List
 
+# 🚨 Исключения для конфигурации
+class ConfigurationError(Exception):
+    """Критическая ошибка конфигурации, требующая немедленного внимания"""
+    pass
+
 # 🎯 Динамическая генерация enum'ов для устранения дублирования
 
 def _get_available_presets() -> List[str]:
     """
     Динамически получает список доступных пресетов из FilterPresetManager
     Устраняет дублирование хардкоженных enum списков
+    
+    Raises:
+        ConfigurationError: При ошибке загрузки пресетов (Fail-Fast подход)
     """
     try:
         from .filters import list_available_presets
         return list(list_available_presets().keys())
     except Exception as e:
-        # ИСПРАВЛЕНО: Логируем критическую ошибку вместо тихого fallback
+        # ИСПРАВЛЕНО: Fail-Fast подход вместо тихого fallback
         import logging
         logger = logging.getLogger(__name__)
-        logger.critical(f"Failed to load filter presets: {e}. Using fallback presets.")
-        return ["default", "aggressive", "code-only", "python-project", "web-app", "react-app", "electron-app"]
+        logger.critical(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось загрузить пресеты фильтров: {e}")
+        raise ConfigurationError(f"Failed to load filter presets: {e}") from e
 
 def _get_available_templates() -> List[str]:
     """
     Динамически получает список доступных шаблонов из TemplateManager
     Устраняет дублирование хардкоженных enum списков
+    
+    Raises:
+        ConfigurationError: При ошибке загрузки шаблонов (Fail-Fast подход)
     """
     try:
         from .template_manager import TemplateManager
         manager = TemplateManager()
         return manager.get_available_templates()
     except Exception as e:
-        # ИСПРАВЛЕНО: Логируем критическую ошибку вместо тихого fallback
+        # ИСПРАВЛЕНО: Fail-Fast подход вместо тихого fallback
         import logging
         logger = logging.getLogger(__name__)
-        logger.critical(f"Failed to load templates: {e}. Using fallback templates.")
-        return ["code-review", "security-audit", "documentation", "refactoring", "migration-guide", "api-documentation", "performance-analysis"]
+        logger.critical(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось загрузить шаблоны: {e}")
+        raise ConfigurationError(f"Failed to load templates: {e}") from e
 
 # 🎯 Общие схемы параметров для переиспользования
 
@@ -387,9 +398,19 @@ def get_analyze_schema() -> Dict[str, Any]:
             },
             "ai_model": {
                 "type": "string",
-                                  "description": "Neira model to use for analysis. gemini-2.5-pro-preview provides the most detailed analysis.",
+                "description": "Neira model to use for analysis. gemini-2.5-pro-preview provides the most detailed analysis.",
                 "default": "gemini-2.5-pro-preview-06-05",
                 "enum": ["gemini-2.5-pro-preview-06-05", "gemini-2.0-flash", "gemini-1.5-pro"]
+            },
+            "user_query": {
+                "type": "string",
+                "description": "Пользовательский запрос или комментарий для фокуса анализа. Например: 'сделай код ревью с фокусом на сокращение размера файлов' или 'обрати внимание на безопасность'. Этот запрос будет передан нейросети вместе с кодом для анализа.",
+                "default": ""
+            },
+            "session_id": {
+                "type": "string",
+                "description": "ID существующей сессии для продолжения диалога. Если НЕ указан или пустой - создается новая сессия. Если указан - продолжается существующая сессия с этим ID.",
+                "default": ""
             }
         }
     }

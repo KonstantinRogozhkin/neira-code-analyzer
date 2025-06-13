@@ -87,6 +87,9 @@ async def list_tools() -> list[Tool]:
     
     Returns:
         list[Tool]: Список доступных инструментов с их схемами
+        
+    Raises:
+        Exception: При критических ошибках конфигурации (Fail-Fast)
     """
     try:
         tools = []
@@ -114,7 +117,16 @@ async def list_tools() -> list[Tool]:
                 tools.append(tool)
                 
             except Exception as e:
-                # Для некритических инструментов создаем fallback с базовой схемой
+                # ИСПРАВЛЕНО: Проверяем тип ошибки для Fail-Fast
+                from .mcp_schemas import ConfigurationError
+                
+                if isinstance(e, ConfigurationError):
+                    # Критическая ошибка конфигурации - прерываем запуск сервера
+                    logger.critical(f"Критическая ошибка конфигурации при загрузке инструмента {tool_name}: {e}")
+                    raise e
+                
+                # Для некритических ошибок создаем fallback
+                logger.warning(f"Не удалось загрузить схему для инструмента {tool_name}: {e}")
                 tool = Tool(
                     name=tool_name,
                     description=f"[FALLBACK] {description}",
@@ -124,8 +136,16 @@ async def list_tools() -> list[Tool]:
         
         return tools
         
-    except Exception:
-        # Возвращаем минимальный набор инструментов в случае ошибки
+    except Exception as e:
+        from .mcp_schemas import ConfigurationError
+        
+        if isinstance(e, ConfigurationError):
+            # Критическая ошибка конфигурации - не можем запуститься
+            logger.critical(f"Сервер не может запуститься из-за критической ошибки конфигурации: {e}")
+            raise e
+        
+        # Для других ошибок возвращаем минимальный набор инструментов
+        logger.error(f"Ошибка при создании списка инструментов: {e}")
         return [
             Tool(
                 name="get_context",
