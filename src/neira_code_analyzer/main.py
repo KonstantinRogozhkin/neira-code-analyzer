@@ -42,9 +42,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация DI контейнера для устранения циклических зависимостей
-from .container import setup_container
-setup_container()
+# АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: DI-контейнер больше не нужен
+# Все зависимости создаются напрямую при необходимости
 
 # Импорт централизованных схем для устранения дублирования MCP инструментов
 from .mcp_schemas import get_tool_schema
@@ -73,7 +72,8 @@ async def list_tools() -> list[Tool]:
             ("set_filters", "🎯 Автоматически подбирает оптимальные фильтры для проекта и сохраняет их в .neira. Анализирует структуру проекта, определяет тип (Python, React, etc.), применяет подходящие фильтры и сохраняет конфигурацию для повторного использования."),
             ("get_templates", "🎯 STEP 1: Get list of available professional templates for code analysis. Use this FIRST to see all available templates (code-review, security-audit, documentation, etc.) with descriptions and use cases. Then use 'get_context' with 'template_name' parameter."),
             ("manage_presets", "🎛️ Управление пресетами фильтров: просмотр, создание, удаление, экспорт/импорт сохраненных конфигураций фильтров. Позволяет сохранять удачные комбинации include/exclude паттернов для повторного использования в разных проектах."),
-            ("get_analyze", "🔍 Автоматический анализ кода через Neira. Запускает set_filters, проверяет количество токенов (до 1 млн), подбирает оптимальные фильтры и выполняет детальный Neira анализ. Поддерживает различные шаблоны анализа. Сохраняет результаты в файл *.analyze.md.")
+            ("get_analyze", "🔍 Автоматический анализ кода через Neira. Запускает set_filters, проверяет количество токенов (до 1 млн), подбирает оптимальные фильтры и выполняет детальный Neira анализ. Поддерживает различные шаблоны анализа. Сохраняет результаты в файл *.analyze.md."),
+            ("gen_docs", "📚 Автоматическая генерация и обновление документации проекта. Сканирует файлы проекта, извлекает знания из отчётов, обновляет документацию в docs/, создаёт changelog из git-истории, сжимает длинные файлы и архивирует обработанные материалы.")
         ]
         
         # 🔒 CRITICAL TOOLS: Эти инструменты критичны для работы сервера
@@ -141,7 +141,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         "set_filters": set_filters_tool,
         "get_templates": get_templates_tool,
         "manage_presets": manage_presets_tool,
-        "get_analyze": get_analyze_tool
+        "get_analyze": get_analyze_tool,
+        "gen_docs": gen_docs_tool
     }
     
     handler = tool_handlers.get(name)
@@ -163,9 +164,9 @@ async def get_context_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Сгенерированный контекст в формате текста
     """
-    # Получаем context_generator через DI контейнер для устранения циклических зависимостей
-    from .container import get_context_generator
-    context_generator = get_context_generator()
+    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем context_generator напрямую
+    from .context_generator import ContextGenerator
+    context_generator = ContextGenerator()
     
     # Перенаправляем вызов на реализацию в context_generator
     return await context_generator.get_context(arguments)
@@ -186,12 +187,24 @@ async def set_filters_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Отчет о настройке и сохранении фильтров
     """
-    # Получаем context_generator через DI контейнер для устранения циклических зависимостей  
-    from .container import get_context_generator
-    context_generator = get_context_generator()
+    # Используем новый FilterSetupService вместо устаревшего метода из context_generator  
+    from .filter_setup_service import FilterSetupService
+    filter_service = FilterSetupService()
     
-    # Используем MCP обертку для совместимости
-    return await context_generator.set_filters_tool(arguments)
+    # Выполняем настройку фильтров через специализированный сервис
+    result = await filter_service.setup_project_filters(
+        path=arguments.get("path", "."),
+        preset_name=arguments.get("preset_name"),
+        include_patterns=arguments.get("include_patterns", []),
+        exclude_patterns=arguments.get("exclude_patterns", []),
+        merge_with_preset=arguments.get("merge_with_preset", False),
+        encoding=arguments.get("encoding", "cl100k")
+    )
+    
+    if result.success:
+        return [TextContent(type="text", text=result.report_message)]
+    else:
+        return [TextContent(type="text", text=result.error_message or "Unknown error")]
 
 
 async def get_templates_tool(arguments: dict) -> list[TextContent]:
@@ -206,9 +219,9 @@ async def get_templates_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Список шаблонов с кратким описанием
     """
-    # Получаем template_manager через DI контейнер для устранения циклических зависимостей
-    from .container import get_template_manager  
-    template_manager = get_template_manager()
+    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем template_manager напрямую
+    from .template_manager import TemplateManager  
+    template_manager = TemplateManager()
     
     try:
         show_content = arguments.get("show_content", False)
@@ -234,150 +247,14 @@ async def manage_presets_tool(arguments: dict) -> list[TextContent]:
         list[TextContent]: Результат операции с пресетами
     """
     try:
-        from .filters import get_preset_manager, list_available_presets, get_preset_details
+        # Получаем менеджер пресетов и делегируем ему всю логику
+        from .filters import FilterPresetManager
+        manager = FilterPresetManager()
         
-        action = arguments.get("action", "list")
+        # Делегируем обработку действия менеджеру
+        result = manager.handle_action(arguments)
         
-        if action == "list":
-            # Список всех доступных пресетов
-            presets = list_available_presets()
-            
-            response = "# 🎛️ Управление пресетами фильтров\n\n"
-            response += f"## 📋 Доступные пресеты ({len(presets)})\n\n"
-            
-            for name, description in presets.items():
-                # Определяем тип пресета
-                if name in ["default", "aggressive", "code-only", "python-project", "web-app", "react-app", "electron-app"]:
-                    preset_type = "🏗️ Встроенный"
-                else:
-                    preset_type = "👤 Пользовательский"
-                
-                response += f"### {preset_type}: `{name}`\n"
-                response += f"**Описание:** {description}\n\n"
-            
-            # Инструкции по использованию
-            response += "## 🚀 Как использовать пресеты\n\n"
-            response += "**Загрузка пресета:**\n"
-            response += "```json\n"
-            response += '{"preset_name": "python-project"}\n'
-            response += "```\n\n"
-            
-            response += "**Создание пресета:**\n"
-            response += "```json\n"
-            response += '{\n  "action": "create",\n  "name": "my-preset",\n  "include_patterns": ["*.py", "*.md"],\n  "exclude_patterns": ["tests/**"],\n  "description": "Мой пресет"\n}\n'
-            response += "```\n\n"
-            
-            return [TextContent(type="text", text=response)]
-            
-        elif action == "create":
-            # Создание нового пресета
-            name = arguments.get("name")
-            include_patterns = arguments.get("include_patterns", [])
-            exclude_patterns = arguments.get("exclude_patterns", [])
-            description = arguments.get("description", "")
-            
-            if not name:
-                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' для создания пресета")]
-            
-            from .filters import save_preset
-            success = save_preset(name, include_patterns, exclude_patterns, description)
-            
-            if success:
-                response = f"✅ Пресет '{name}' успешно создан!\n\n"
-                response += f"**Описание:** {description}\n"
-                response += f"**Include паттерны:** {include_patterns}\n"
-                response += f"**Exclude паттерны:** {exclude_patterns}\n"
-            else:
-                response = f"❌ Ошибка создания пресета '{name}'"
-                
-            return [TextContent(type="text", text=response)]
-            
-        elif action == "details":
-            # Подробная информация о пресете
-            name = arguments.get("name")
-            if not name:
-                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' для получения деталей")]
-            
-            details = get_preset_details(name)
-            if not details:
-                return [TextContent(type="text", text=f"❌ Пресет '{name}' не найден")]
-            
-            response = f"# 🔍 Детали пресета: `{name}`\n\n"
-            response += f"**Описание:** {details['description']}\n\n"
-            
-            if details['include_patterns']:
-                response += "## ✅ Include patterns:\n"
-                for pattern in details['include_patterns']:
-                    response += f"- `{pattern}`\n"
-                response += "\n"
-            
-            if details['exclude_patterns']:
-                response += "## ❌ Exclude patterns:\n"
-                for pattern in details['exclude_patterns']:
-                    response += f"- `{pattern}`\n"
-                response += "\n"
-            
-            # Метаданные если есть
-            if 'created_at' in details:
-                response += f"**Создан:** {details['created_at']}\n"
-            if 'metadata' in details and details['metadata']:
-                response += f"**Метаданные:** {details['metadata']}\n"
-            
-            return [TextContent(type="text", text=response)]
-            
-        elif action == "delete":
-            # Удаление пресета
-            name = arguments.get("name")
-            if not name:
-                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' для удаления")]
-            
-            manager = get_preset_manager()
-            success = manager.delete_preset(name)
-            
-            if success:
-                response = f"✅ Пресет '{name}' успешно удален"
-            else:
-                response = f"❌ Ошибка удаления пресета '{name}' (возможно, это встроенный пресет или он не существует)"
-                
-            return [TextContent(type="text", text=response)]
-            
-        elif action == "export":
-            # Экспорт пресета
-            name = arguments.get("name")
-            file_path = arguments.get("file_path")
-            
-            if not name or not file_path:
-                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'name' и 'file_path' для экспорта")]
-            
-            manager = get_preset_manager()
-            success = manager.export_preset(name, file_path)
-            
-            if success:
-                response = f"✅ Пресет '{name}' экспортирован в {file_path}"
-            else:
-                response = f"❌ Ошибка экспорта пресета '{name}'"
-                
-            return [TextContent(type="text", text=response)]
-            
-        elif action == "import":
-            # Импорт пресета
-            file_path = arguments.get("file_path")
-            
-            if not file_path:
-                return [TextContent(type="text", text="❌ Ошибка: необходимо указать 'file_path' для импорта")]
-            
-            manager = get_preset_manager()
-            imported_name = manager.import_preset(file_path)
-            
-            if imported_name:
-                response = f"✅ Пресет '{imported_name}' успешно импортирован из {file_path}"
-            else:
-                response = f"❌ Ошибка импорта пресета из {file_path}"
-                
-            return [TextContent(type="text", text=response)]
-            
-        else:
-            return [TextContent(type="text", text=f"❌ Неизвестное действие: {action}. Доступные: list, create, details, delete, export, import")]
+        return [TextContent(type="text", text=result)]
         
     except Exception as e:
         error_msg = f"❌ Ошибка управления пресетами: {str(e)}"
@@ -397,9 +274,9 @@ async def get_analyze_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Результат анализа от Neira
     """
-    # Получаем ai_analyzer через DI контейнер для устранения циклических зависимостей
-    from .container import get_ai_analyzer
-    ai_analyzer = get_ai_analyzer()
+    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем ai_analyzer напрямую
+    from .ai_analyzer import NeiraAnalyzer
+    ai_analyzer = NeiraAnalyzer()
     
     try:
         logger.info(f"Delegating code review to ai_analyzer for path: {arguments.get('path', '.')}")
@@ -411,6 +288,49 @@ async def get_analyze_tool(arguments: dict) -> list[TextContent]:
     except Exception as e:
         logger.error(f"Error in code review tool: {e}")
         return [TextContent(type="text", text=f"❌ КРИТИЧЕСКАЯ ОШИБКА: {str(e)}")]
+
+async def gen_docs_tool(arguments: dict) -> list[TextContent]:
+    """
+    Автоматическая генерация и обновление документации проекта
+    
+    Реализует полный цикл по инструкции @DOCS_MANAGER.md:
+    - Сканирует проект на наличие сырых материалов (отчёты, длинные файлы)
+    - Извлекает знания и проверяет актуальность
+    - Сжимает и структурирует документацию
+    - Обновляет changelog из git-истории
+    - Архивирует обработанные файлы
+    
+    Args:
+        arguments: Параметры генерации документации
+        
+    Returns:
+        list[TextContent]: Отчёт о выполненной работе
+    """
+    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем docs_generator напрямую
+    from .docs_generator import DocsGenerator
+    
+    try:
+        logger.info(f"Starting documentation generation for path: {arguments.get('path', '.')}")
+        
+        # Создаем генератор документации напрямую
+        docs_generator = DocsGenerator()
+        
+        # Делегируем выполнение специализированному модулю
+        result_text = await docs_generator.generate_docs(**arguments)
+        return [TextContent(type="text", text=result_text)]
+        
+    except Exception as e:
+        logger.error(f"Error in documentation generation: {e}")
+        return [TextContent(type="text", text=f"❌ ОШИБКА ГЕНЕРАЦИИ ДОКУМЕНТАЦИИ: {str(e)}")]
+
+def create_server() -> Server:
+    """
+    Создает и возвращает экземпляр MCP сервера для использования в отладочных скриптах
+    
+    Returns:
+        Server: Настроенный экземпляр MCP сервера
+    """
+    return app
 
 async def main():
     """

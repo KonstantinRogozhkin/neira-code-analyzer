@@ -94,8 +94,39 @@ class ContextGenerator:
     """Генерация контекста из кодовых баз"""
     
     def __init__(self):
-        """Инициализация генератора контекста"""
-        logger.info("Context generator initialized")
+        """
+        Инициализация генератора контекста
+        
+        АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: ContextGenerator теперь создает свои зависимости напрямую
+        вместо использования DI-контейнера. Это устраняет циклические зависимости.
+        """
+        logger.info("ContextGenerator initialized with direct dependencies")
+        
+        # Ленивая инициализация low-level зависимостей
+        self._template_manager = None
+        self._project_manager = None
+
+    def _get_template_manager(self):
+        """
+        Ленивое создание TemplateManager
+        
+        АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем зависимость напрямую вместо DI-контейнера
+        """
+        if self._template_manager is None:
+            from .template_manager import TemplateManager
+            self._template_manager = TemplateManager()
+        return self._template_manager
+
+    def _get_project_manager(self):
+        """
+        Ленивое создание ProjectManager
+        
+        АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем зависимость напрямую вместо DI-контейнера
+        """
+        if self._project_manager is None:
+            from .project_manager import ProjectManager
+            self._project_manager = ProjectManager()
+        return self._project_manager
 
     def generate_context(self, arguments: Dict[str, Any]) -> tuple[str, Optional[str]]:
         """
@@ -135,9 +166,8 @@ class ContextGenerator:
         # Определяем какой шаблон использовать
         template = self._resolve_template(config.template_name, config.custom_template)
         if template is None and config.template_name:
-            # Шаблон не найден - получаем template_manager через DI контейнер
-            from .container import get_template_manager
-            template_manager = get_template_manager()
+            # Шаблон не найден
+            template_manager = self._get_template_manager()
             available = template_manager.get_available_templates()
             raise ValueError(f"Template '{config.template_name}' not found. Available: {', '.join(available)}")
         
@@ -199,9 +229,8 @@ class ContextGenerator:
             Optional[str]: Содержимое шаблона или None для стандартного
         """
         if template_name:
-            # Загружаем предопределенный шаблон через DI контейнер
-            from .container import get_template_manager
-            template_manager = get_template_manager()
+            # Загружаем предопределенный шаблон
+            template_manager = self._get_template_manager()
             template = template_manager.load_template(template_name)
             if template is None:
                 logger.error(f"Template '{template_name}' not found")
@@ -219,39 +248,15 @@ class ContextGenerator:
 
     def _resolve_preset_patterns(self, config: ContextConfig) -> tuple[List[str], List[str]]:
         """
-        Разрешает паттерны фильтров с учетом пресетов
-        
-        Args:
-            config: Конфигурация контекста
-            
-        Returns:
-            tuple: (финальные include_patterns, финальные exclude_patterns)
+        ИСПРАВЛЕНИЕ: Используем централизованную функцию разрешения пресетов
         """
-        from .filters import load_preset
-        
-        final_include_patterns = config.include_patterns.copy()
-        final_exclude_patterns = config.exclude_patterns.copy()
-        
-        # Если указан пресет, загружаем его
-        if config.preset_name:
-            preset_patterns = load_preset(config.preset_name)
-            if preset_patterns:
-                preset_include, preset_exclude = preset_patterns
-                
-                if config.merge_with_preset:
-                    # Объединяем с пользовательскими паттернами
-                    final_include_patterns = list(set(preset_include + final_include_patterns))
-                    final_exclude_patterns = list(set(preset_exclude + final_exclude_patterns))
-                    logger.info(f"Merged preset '{config.preset_name}' with custom patterns")
-                else:
-                    # Полная замена пользовательскими паттернами
-                    final_include_patterns = preset_include
-                    final_exclude_patterns = preset_exclude
-                    logger.info(f"Loaded preset '{config.preset_name}' patterns")
-            else:
-                logger.warning(f"Preset '{config.preset_name}' not found, using original patterns")
-        
-        return final_include_patterns, final_exclude_patterns
+        from .filters import resolve_patterns_with_preset
+        return resolve_patterns_with_preset(
+            config.preset_name, 
+            config.include_patterns, 
+            config.exclude_patterns, 
+            config.merge_with_preset
+        )
     
     def _save_as_preset(self, preset_name: str, include_patterns: List[str], 
                        exclude_patterns: List[str], project_path: str, token_count: int):
@@ -293,10 +298,9 @@ class ContextGenerator:
         Returns:
             str: Путь к сохраненному файлу
         """
-        # Получаем зависимости через DI контейнер
-        from .container import get_template_manager, get_project_manager
-        template_manager = get_template_manager()
-        project_manager = get_project_manager()
+        # Получаем зависимости напрямую
+        template_manager = self._get_template_manager()
+        project_manager = self._get_project_manager()
         
         # Определяем тип файла
         file_type = template_manager.get_file_type_from_template(
@@ -325,8 +329,7 @@ class ContextGenerator:
                           encoding: str, token_count: int):
         """Сохранить информацию о примененных фильтрах"""
         try:
-            from .container import get_project_manager
-            project_manager = get_project_manager()
+            project_manager = self._get_project_manager()
             project_name = project_manager.get_project_name(path)
             filters_filename = f"{project_name}.filters-used.md"
             filters_save_path = save_path.parent / filters_filename
@@ -422,8 +425,7 @@ class ContextGenerator:
         response += f"**📝 Кодировка:** {encoding}\n\n"
         
         # Информация о файле с фильтрами
-        from .container import get_project_manager
-        project_manager = get_project_manager()
+        project_manager = self._get_project_manager()
         project_name = project_manager.get_project_name(path)
         filters_path = Path(saved_file_path).parent / f"{project_name}.filters-used.md"
         response += f"## 🔧 Файл с конфигурацией фильтров\n"
@@ -439,11 +441,10 @@ class ContextGenerator:
                 self.total_tokens = result.token_count
                 self.total_characters = len(result.prompt)
                 self.total_lines = result.prompt.count('\n')
-                # ИСПРАВЛЕНИЕ: Честно указываем что детальная статистика недоступна
-                self.total_files = None  # Неизвестно из code2prompt-rs - используем None
-                self.top_files_by_size = []
-                self.file_type_stats = {}
-                self.has_detailed_stats = False  # Всегда False - детальных данных нет
+                # ИСПРАВЛЕНИЕ: Явно указываем None для недоступных данных
+                self.total_files = None  # Неизвестно из code2prompt-rs
+                self.top_files_by_size = None  # Нет детальной информации
+                self.file_type_stats = None  # Нет детальной информации
 
         return SimpleStats(result, path)
 
@@ -455,6 +456,17 @@ class ContextGenerator:
         Quick Performance Win: Автоматические рекомендации для экономии токенов
         """
         from .filters import DEFAULT_EXCLUDES, AGGRESSIVE_EXCLUDES, get_code_only_patterns
+        
+        # ИСПРАВЛЕНИЕ: Явная проверка доступности детальной статистики
+        if not hasattr(stats, 'file_type_stats') or stats.file_type_stats is None:
+            return "## 💡 Рекомендации по оптимизации\n\n" \
+                   "⚠️ **Детальная статистика по файлам недоступна.** Невозможно дать точные рекомендации по оптимизации.\n\n" \
+                   "**🔧 Общие рекомендации для оптимизации:**\n" \
+                   "- Используйте базовые исключения: `node_modules/**`, `dist/**`, `__pycache__/**`\n" \
+                   "- Исключите файлы тестов: `tests/**`, `*.test.js`, `*.spec.ts`\n" \
+                   "- Уберите lock-файлы: `package-lock.json`, `yarn.lock`, `poetry.lock`\n" \
+                   "- Исключите медиа и шрифты: `*.png`, `*.jpg`, `*.woff`, `*.ttf`\n\n" \
+                   "💡 **Для детального анализа:** Попробуйте использовать другие фильтры или убедитесь, что code2prompt-rs может обработать файлы проекта.\n\n"
         
         recommendations = []
         ready_filters = []
@@ -665,10 +677,13 @@ class ContextGenerator:
             response = "# 📊 Анализ фильтров кода\n\n"
             
             # Добавляем явное предупреждение если детальная статистика недоступна
-            if not stats.has_detailed_stats:
-                response += "## ⚠️ Важное предупреждение\n\n"
-                response += "**📋 Детальная статистика недоступна:** Библиотека code2prompt-rs не предоставила разбивку по файлам для данного набора фильтров. Общее количество токенов и файлов рассчитано корректно, но их распределение по типам файлов и топ-файлы неизвестны.\n\n"
-                response += "**💡 Это означает:** рекомендации по оптимизации могут быть неточными. Используйте базовые исключения и проверяйте результаты через обычные инструменты анализа кода.\n\n"
+            if stats.file_type_stats is None or stats.top_files_by_size is None:
+                response += "## ⚠️ Внимание: Детальная статистика недоступна\n\n"
+                response += "**📋 Ограничение библиотеки:** code2prompt-rs не смогла предоставить разбивку по файлам для текущей конфигурации. Общие метрики (токены, файлы) корректны, но рекомендации по оптимизации могут быть неточными.\n\n"
+                response += "**💡 Рекомендации:**\n"
+                response += "- Используйте встроенные пресеты (`default`, `python-project`, `react-app`)\n"
+                response += "- Попробуйте более простые паттерны фильтрации\n"
+                response += "- Общие метрики всё равно точны и полезны\n\n"
                 response += "---\n\n"
             
             response += f"**🎯 Общие токены:** {stats.total_tokens:,}\n"
@@ -681,7 +696,7 @@ class ContextGenerator:
             response += f"**🔢 Всего строк:** {stats.total_lines:,}\n\n"
             
             # Топ файлов по размеру
-            if stats.has_detailed_stats and stats.top_files_by_size:
+            if stats.top_files_by_size:
                 response += f"## 🔝 Топ-{min(show_top_files, len(stats.top_files_by_size))} файлов по размеру\n\n"
                 for i, file_info in enumerate(stats.top_files_by_size[:show_top_files], 1):
                     response += f"{i}. **{file_info.file_path}**\n"
@@ -690,7 +705,7 @@ class ContextGenerator:
                     response += f"   - Строки: {file_info.lines:,}\n\n"
             
             # Статистика по расширениям
-            if stats.has_detailed_stats and stats.file_type_stats:
+            if stats.file_type_stats:
                 response += "## 📋 Статистика по типам файлов\n\n"
                 response += "| Расширение | Файлы | Токены | Символы | Строки |\n"
                 response += "|------------|-------|--------|---------|--------|\n"
@@ -711,7 +726,7 @@ class ContextGenerator:
                 response += "**✅ Решение:** используйте базовые рекомендации и проверяйте результаты через обычные инструменты анализа кода.\n\n"
             
             # Проактивные рекомендации по оптимизации (Quick Performance Win)
-            if stats.has_detailed_stats:
+            if stats.file_type_stats:
                 response += self._generate_optimization_recommendations(
                     stats, include_patterns, exclude_patterns, path
                 )
@@ -778,7 +793,7 @@ class ContextGenerator:
                     'total_characters': stats.total_characters,
                     'total_lines': stats.total_lines,
                     'file_type_stats': stats.file_type_stats,
-                    'top_files_by_size': stats.top_files_by_size if hasattr(stats, 'top_files_by_size') else []
+                    'top_files_by_size': stats.top_files_by_size or []
                 }
             )
             
@@ -795,9 +810,23 @@ class ContextGenerator:
     async def analyze_filters_tool(self, arguments: dict) -> list[TextContent]:
         """
         MCP обертка для analyze_filters - для совместимости с MCP интерфейсом
+        
+        ⚠️ УСТАРЕВШИЙ ИНСТРУМЕНТ: Рекомендуется использовать `set_filters` для настройки фильтров.
+        `analyze_filters` предназначен только для отладки и анализа существующих конфигураций.
+        
+        Для полного AI анализа используйте `get_analyze`.
         """
         result = await self.analyze_filters(arguments)
-        return [TextContent(type="text", text=result.markdown_report)]
+        
+        # Добавляем предупреждение в начало отчёта
+        deprecated_warning = "## ⚠️ Устаревший инструмент\n\n"
+        deprecated_warning += "**Этот инструмент устарел.** Рекомендуется использовать:\n"
+        deprecated_warning += "- **`set_filters`** - для настройки и оптимизации фильтров\n"
+        deprecated_warning += "- **`get_analyze`** - для полного автоматического AI анализа кода\n\n"
+        deprecated_warning += "---\n\n"
+        
+        enhanced_report = deprecated_warning + result.markdown_report
+        return [TextContent(type="text", text=enhanced_report)]
 
     async def get_context(self, arguments: dict) -> list[TextContent]:
         """
@@ -817,246 +846,14 @@ class ContextGenerator:
             logger.error(error_msg)
             return [TextContent(type="text", text=error_msg)]
 
-    async def set_filters(self, arguments: dict) -> AnalysisResult:
-        """
-        Автоматически подбирает оптимальные фильтры и сохраняет их в проект
-        
-        Анализирует структуру проекта, определяет тип проекта, подбирает оптимальные
-        фильтры и сохраняет конфигурацию в .neira в корне проекта.
-        
-        Returns:
-            AnalysisResult: Результат настройки фильтров
-        """
-        
-        path = arguments.get("path", ".")
-        preset_name = arguments.get("preset_name")
-        include_patterns = arguments.get("include_patterns", [])
-        exclude_patterns = arguments.get("exclude_patterns", [])
-        merge_with_preset = arguments.get("merge_with_preset", False)
-        encoding = arguments.get("encoding", "cl100k")
-        
-        logger.info(f"Setting up optimal filters for {path}")
-        
-        try:
-            # Если пресет не указан, пытаемся автоматически определить тип проекта
-            if not preset_name and not include_patterns:
-                detected_preset = self._detect_project_type(path)
-                if detected_preset:
-                    preset_name = detected_preset
-                    logger.info(f"Auto-detected project type: {preset_name}")
-            
-            # Разрешаем паттерны с учетом пресетов
-            if preset_name:
-                from .filters import load_preset
-                preset_patterns = load_preset(preset_name)
-                if preset_patterns:
-                    preset_include, preset_exclude = preset_patterns
-                    
-                    if merge_with_preset:
-                        # Объединяем с пользовательскими паттернами
-                        include_patterns = list(set(preset_include + include_patterns))
-                        exclude_patterns = list(set(preset_exclude + exclude_patterns))
-                        logger.info(f"Merged preset '{preset_name}' with custom patterns")
-                    else:
-                        # Полная замена
-                        include_patterns = preset_include
-                        exclude_patterns = preset_exclude
-                        logger.info(f"Using preset '{preset_name}' patterns")
-                else:
-                    logger.warning(f"Preset '{preset_name}' not found, using original patterns")
-            
-            # Если паттерны все еще пусты, используем базовые исключения
-            if not include_patterns and not exclude_patterns:
-                exclude_patterns = [
-                    "node_modules/**", "dist/**", "build/**", "out/**", ".git/**",
-                    "__pycache__/**", "*.pyc", "*.log", "*.tmp", "*.cache", "*.lock",
-                    "coverage/**", "*.min.js", "*.min.css", "*.tsbuildinfo"
-                ]
-                logger.info("Using default exclusion patterns")
-            
-            # Создаем объект промпта для анализа с расширенными возможностями
-            prompt = self._create_code2prompt(
-                path=path,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-                line_numbers=False,
-                absolute_paths=False,
-                full_directory_tree=False,
-                code_blocks=False,
-                include_priority=False,
-                follow_symlinks=False,
-                include_hidden=False,
-            )
-            
-            # Получаем статистику
-            result = prompt.generate(encoding=encoding)
-            stats = self._create_simple_stats(result, path)
-            
-            # Создаем конфигурацию для сохранения
-            config = {
-                "version": "1.0",
-                "created_at": datetime.now().isoformat(),
-                "project_path": str(Path(path).resolve()),
-                "preset_used": preset_name,
-                "auto_detected": preset_name and not arguments.get("preset_name"),
-                "filters": {
-                    "include_patterns": include_patterns,
-                    "exclude_patterns": exclude_patterns
-                },
-                "stats": {
-                    "total_files": stats.total_files,
-                    "total_tokens": stats.total_tokens,
-                    "total_characters": stats.total_characters,
-                    "total_lines": stats.total_lines
-                },
-                "encoding": encoding
-            }
-            
-            # Сохраняем конфигурацию в .neira
-            config_path = Path(path) / ".neira"
-            try:
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config, f, indent=2, ensure_ascii=False)
-                logger.info(f"Filter configuration saved to {config_path}")
-                config_saved = True
-            except Exception as save_error:
-                logger.error(f"Failed to save config to {config_path}: {save_error}")
-                config_saved = False
-            
-            # Формируем отчет
-            response = "# 🎯 Фильтры настроены и сохранены\n\n"
-            
-            if config_saved:
-                response += f"## ✅ Конфигурация сохранена\n"
-                response += f"**📁 Файл:** `{config_path}`\n"
-                response += f"**📅 Дата:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            else:
-                response += f"## ⚠️ Ошибка сохранения конфигурации\n"
-                response += f"Не удалось сохранить в `{config_path}`\n\n"
-            
-            # Информация о настройке
-            if preset_name:
-                if arguments.get("preset_name"):
-                    response += f"**🎛️ Использован пресет:** `{preset_name}` (указан вручную)\n"
-                else:
-                    response += f"**🤖 Автоопределен пресет:** `{preset_name}`\n"
-            else:
-                response += f"**⚙️ Режим:** Пользовательские фильтры\n"
-            
-            response += f"**🎯 Результат:** {stats.total_files} файлов, {stats.total_tokens:,} токенов\n\n"
-            
-            # Примененные фильтры
-            response += "## 🔧 Примененные фильтры\n\n"
-            
-            if include_patterns:
-                response += "### ✅ Include patterns:\n"
-                for pattern in include_patterns:
-                    response += f"- `{pattern}`\n"
-                response += "\n"
-            else:
-                response += "### ✅ Include patterns: *(все файлы)*\n\n"
-            
-            if exclude_patterns:
-                response += "### ❌ Exclude patterns:\n"
-                for pattern in exclude_patterns:
-                    response += f"- `{pattern}`\n"
-                response += "\n"
-            else:
-                response += "### ❌ Exclude patterns: *(нет исключений)*\n\n"
-            
-            # Инструкции по использованию
-            response += "## 🚀 Как использовать\n\n"
-            response += "Теперь другие инструменты neira-code-analyzer будут автоматически использовать эти фильтры:\n\n"
-            response += "```bash\n"
-            response += "# Анализ с сохраненными фильтрами\n"
-            response += "get_context --load-project-filters\n"
-            response += "get_analyze --load-project-filters\n"
-            response += "```\n\n"
-            
-            if config_saved:
-                response += f"**💡 Совет:** Добавьте `.neira` в git для совместной работы в команде.\n"
-            
-            logger.info(f"Filter setup completed: {stats.total_files} files, {stats.total_tokens:,} tokens")
-            
-            # Возвращаем структурированный результат
-            return AnalysisResult(
-                total_tokens=stats.total_tokens,
-                total_files=stats.total_files,
-                markdown_report=response,
-                file_stats={
-                    'config_saved': config_saved,
-                    'config_path': str(config_path),
-                    'preset_used': preset_name,
-                    'auto_detected': preset_name and not arguments.get("preset_name"),
-                    'total_characters': stats.total_characters,
-                    'total_lines': stats.total_lines
-                }
-            )
-            
-        except Exception as e:
-            error_msg = f"❌ Ошибка настройки фильтров: {str(e)}"
-            logger.error(error_msg)
-            return AnalysisResult(
-                total_tokens=0,
-                total_files=0,
-                markdown_report=error_msg
-            )
+    # УДАЛЕН: Метод set_filters перенесен в FilterSetupService для соблюдения принципа единственной ответственности
+    # Используйте FilterSetupService.setup_project_filters() вместо этого метода
 
-    def _detect_project_type(self, path: str) -> Optional[str]:
-        """
-        Автоматически определяет тип проекта по файлам в директории
-        
-        Args:
-            path: Путь к проекту
-            
-        Returns:
-            Optional[str]: Название подходящего пресета или None
-        """
-        project_path = Path(path)
-        
-        # Проверяем наличие характерных файлов
-        files_in_root = [f.name for f in project_path.iterdir() if f.is_file()]
-        dirs_in_root = [d.name for d in project_path.iterdir() if d.is_dir()]
-        
-        # React/Next.js проект
-        if "package.json" in files_in_root:
-            try:
-                package_json = project_path / "package.json"
-                with open(package_json, 'r', encoding='utf-8') as f:
-                    package_data = json.load(f)
-                    dependencies = {**package_data.get("dependencies", {}), **package_data.get("devDependencies", {})}
-                    
-                    if "react" in dependencies or "next" in dependencies:
-                        return "react-app"
-                    elif "electron" in dependencies:
-                        return "electron-app"
-                    else:
-                        return "web-app"
-            except:
-                return "web-app"
-        
-        # Python проект
-        if any(f in files_in_root for f in ["requirements.txt", "pyproject.toml", "setup.py", "Pipfile"]):
-            return "python-project"
-        
-        # Если есть Python файлы в корне
-        if any(f.endswith('.py') for f in files_in_root):
-            return "python-project"
-        
-        # Если есть src директория с Python файлами
-        src_dir = project_path / "src"
-        if src_dir.exists() and any(f.suffix == '.py' for f in src_dir.rglob('*.py')):
-            return "python-project"
-        
-        # По умолчанию используем code-only для фокуса на коде
-        return "code-only"
+    # УДАЛЕН: Метод _detect_project_type перенесен в FilterSetupService
+    # Используйте FilterSetupService._detect_project_type() если нужна эта функциональность
 
-    async def set_filters_tool(self, arguments: dict) -> list[TextContent]:
-        """
-        MCP обертка для set_filters - для совместимости с MCP интерфейсом
-        """
-        result = await self.set_filters(arguments)
-        return [TextContent(type="text", text=result.markdown_report)]
+    # УДАЛЕН: Метод set_filters_tool перенесен в FilterSetupService
+    # Используйте FilterSetupService.setup_project_filters() в main.py
 
     def _create_code2prompt(self, path: str, include_patterns: list, exclude_patterns: list, **kwargs) -> Any:
         """Создает объект Code2Prompt с расширенными возможностями из code2prompt-rs"""

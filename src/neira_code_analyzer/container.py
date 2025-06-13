@@ -122,11 +122,26 @@ def setup_container() -> None:
         from .ai_analyzer import NeiraAnalyzer
         return NeiraAnalyzer()
         
+    def create_filter_manager():
+        from .filters import FilterPresetManager
+        return FilterPresetManager()
+        
+    def create_filter_setup_service():
+        from .filter_setup_service import FilterSetupService
+        return FilterSetupService()
+        
+    def create_docs_generator():
+        from .docs_generator import DocsGenerator
+        return DocsGenerator()
+        
     # Регистрируем фабрики
     container.register_factory("template_manager", create_template_manager)
     container.register_factory("project_manager", create_project_manager)
     container.register_factory("context_generator", create_context_generator)
     container.register_factory("ai_analyzer", create_ai_analyzer)
+    container.register_factory("filter_manager", create_filter_manager)
+    container.register_factory("filter_setup_service", create_filter_setup_service)
+    container.register_factory("docs_generator", create_docs_generator)
     
     logger.info("Dependency injection container setup complete")
 
@@ -162,4 +177,19 @@ def get_context_generator():
 
 def get_ai_analyzer():
     """Получить экземпляр NeiraAnalyzer"""
-    return get_service("ai_analyzer") 
+    return get_service("ai_analyzer")
+
+
+def get_filter_manager():
+    """Получить экземпляр FilterPresetManager"""
+    return get_service("filter_manager")
+
+
+def get_filter_setup_service():
+    """Получить экземпляр FilterSetupService"""
+    return get_service("filter_setup_service")
+
+
+def get_docs_generator():
+    """Получить экземпляр DocsGenerator"""
+    return get_service("docs_generator") 
