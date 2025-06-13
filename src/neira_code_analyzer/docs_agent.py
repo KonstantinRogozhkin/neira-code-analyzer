@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from .docs_session_manager import DocsSessionManager, SessionState
 from .action_executor import ActionExecutor, ExecutionSummary
+from .response_parser import AIResponseParser
 
 logger = logging.getLogger(__name__)
 
@@ -28,66 +29,38 @@ class AIResponse:
     
     @classmethod
     def from_json(cls, json_data: str) -> 'AIResponse':
-        """Создает объект из JSON строки с улучшенной обработкой ошибок"""
-        try:
-            # Проверяем что данные не пустые
-            if not json_data or not json_data.strip():
-                logger.error("Получена пустая строка от ИИ")
-                return cls(
-                    status='error',
-                    next_steps=[],
-                    summary="ИИ вернул пустой ответ",
-                    analysis="Нет данных для обработки"
-                )
-            
-            # Логируем полученные данные для отладки
-            logger.debug(f"Parsing AI response (first 200 chars): {json_data[:200]}")
-            
-            # Очищаем ответ от markdown форматирования
-            cleaned_data = json_data.strip()
-            if cleaned_data.startswith('```json'):
-                # Убираем ```json в начале и ``` в конце
-                cleaned_data = cleaned_data[7:]  # Убираем ```json
-                if cleaned_data.endswith('```'):
-                    cleaned_data = cleaned_data[:-3]  # Убираем ```
-                cleaned_data = cleaned_data.strip()
-            elif cleaned_data.startswith('```'):
-                # Убираем просто ``` в начале и конце
-                cleaned_data = cleaned_data[3:]
-                if cleaned_data.endswith('```'):
-                    cleaned_data = cleaned_data[:-3]
-                cleaned_data = cleaned_data.strip()
-            
-            logger.debug(f"Cleaned JSON (first 100 chars): {cleaned_data[:100]}")
-            data = json.loads(cleaned_data)
-            
-            # Проверяем обязательные поля
-            if not isinstance(data, dict):
-                raise ValueError("Response is not a JSON object")
-            
-            required_fields = ['status', 'summary', 'next_steps']
-            missing_fields = [field for field in required_fields if field not in data]
-            if missing_fields:
-                raise ValueError(f"Missing required fields: {missing_fields}")
-            
-            return cls(**data)
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
-            logger.error(f"Raw response: {repr(json_data[:500])}")
+        """Создает объект из JSON строки используя централизованный парсер"""
+        parsed_data = AIResponseParser.from_json(json_data)
+        
+        if not parsed_data:
+            logger.error("Не удалось распарсить ответ ИИ")
             return cls(
                 status='error',
                 next_steps=[],
-                summary=f"Ошибка парсинга JSON: {str(e)}",
-                analysis=f"Некорректный JSON ответ от ИИ: {json_data[:200]}..."
+                summary="Ошибка парсинга ответа ИИ",
+                analysis="Нет данных для обработки"
             )
-        except Exception as e:
-            logger.error(f"Unexpected error parsing AI response: {e}")
+        
+        # Проверяем обязательные поля для документации
+        required_fields = ['status', 'summary', 'next_steps']
+        if not AIResponseParser.validate_response_structure(parsed_data, required_fields):
+            logger.error(f"Отсутствуют обязательные поля: {required_fields}")
             return cls(
                 status='error',
                 next_steps=[],
-                summary=f"Неожиданная ошибка: {str(e)}",
-                analysis=json_data[:500] if isinstance(json_data, str) else str(json_data)
+                summary="Некорректная структура ответа ИИ",
+                analysis="Отсутствуют обязательные поля"
+            )
+        
+        try:
+            return cls(**parsed_data)
+        except Exception as e:
+            logger.error(f"Ошибка создания объекта AIResponse: {e}")
+            return cls(
+                status='error',
+                next_steps=[],
+                summary=f"Ошибка создания объекта: {str(e)}",
+                analysis=str(parsed_data) if parsed_data else "Нет данных"
             )
 
 class DocsAgent:
@@ -114,8 +87,8 @@ class DocsAgent:
         self._ai_module_available = False
         self._generate_ai_review_func = None
         try:
-            from .ai_utils import generate_ai_review
-            self._generate_ai_review_func = generate_ai_review
+            from .ai_utils import generate_ai_review_async
+            self._generate_ai_review_func = generate_ai_review_async
             self._ai_module_available = True
             logger.info("✅ DocsAgent: ИИ модуль инициализирован")
         except ImportError as e:
@@ -297,7 +270,7 @@ class DocsAgent:
             self.logger.info(f"🤖 Отправляем запрос к {ai_model}")
             self.logger.debug(f"Промпт для ИИ (первые 300 символов): {ai_prompt[:300]}...")
             
-            ai_response_text = self._generate_ai_review_func(ai_prompt, ai_model)
+            ai_response_text = await self._generate_ai_review_func(ai_prompt, ai_model)
             
             # Логируем ответ для диагностики
             self.logger.info(f"📥 Получен ответ от ИИ длиной: {len(ai_response_text) if ai_response_text else 0} символов")
@@ -348,7 +321,7 @@ class DocsAgent:
             self.logger.info(f"🤖 Проверяем прогресс с {ai_model}")
             self.logger.debug(f"Промпт прогресса (первые 200 символов): {progress_prompt[:200]}...")
             
-            ai_response_text = self._generate_ai_review_func(progress_prompt, ai_model)
+            ai_response_text = await self._generate_ai_review_func(progress_prompt, ai_model)
             
             # Логируем ответ для диагностики
             self.logger.info(f"📥 Получен ответ прогресса длиной: {len(ai_response_text) if ai_response_text else 0} символов")

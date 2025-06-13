@@ -61,6 +61,34 @@ class ActionExecutor:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
     
+    def _validate_file_path(self, file_path: Path, project_path: Path) -> bool:
+        """
+        Проверяет что путь к файлу находится внутри проекта (защита от Path Traversal)
+        
+        Args:
+            file_path: Путь к файлу
+            project_path: Корневой путь проекта
+            
+        Returns:
+            bool: True если путь безопасен
+        """
+        try:
+            # Разрешаем все символические ссылки
+            resolved_file = file_path.resolve()
+            resolved_project = project_path.resolve()
+            
+            # Проверяем что файл находится внутри проекта
+            try:
+                resolved_file.relative_to(resolved_project)
+                return True
+            except ValueError:
+                self.logger.error(f"Небезопасный путь (за пределами проекта): {file_path}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Ошибка валидации пути {file_path}: {e}")
+            return False
+    
     def execute_actions(self, project_path: Path, actions: List[Dict]) -> ExecutionSummary:
         """
         Выполняет список действий
@@ -164,6 +192,15 @@ class ActionExecutor:
             )
         
         full_path = project_path / file_path
+        
+        # Проверяем безопасность пути
+        if not self._validate_file_path(full_path, project_path):
+            return ActionResult(
+                success=False,
+                action_type=ActionType.CREATE_FILE.value,
+                target_path=file_path,
+                message=f"Отклонен небезопасный путь: {file_path}"
+            )
         
         # Создаем родительские папки если нужно
         full_path.parent.mkdir(parents=True, exist_ok=True)

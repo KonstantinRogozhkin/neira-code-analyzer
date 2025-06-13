@@ -4,9 +4,13 @@ Neira Utilities Module
 
 Этот модуль содержит общие функции для работы с Neira,
 чтобы избежать циклических зависимостей между модулями.
+
+АРХИТЕКТУРНОЕ УЛУЧШЕНИЕ: Добавлена поддержка асинхронных AI вызовов
+для предотвращения блокировки event loop в асинхронной архитектуре.
 """
 
 import os
+import asyncio
 from pathlib import Path
 from google import genai
 from google.genai import types
@@ -33,15 +37,18 @@ def load_env_file():
         print("⚠️ python-dotenv не установлен, переменные окружения не загружены")
         return False
     except Exception as e:
-        print(f"⚠️ Ошибка при загрузке .env файла: {e}")
+        print("⚠️ Ошибка при загрузке .env файла: {e}")
         return False
 
 # load_env_file() убран из автоматического импорта - теперь вызывается явно при старте сервера
 
 
-def generate_ai_review(prompt_text: str, model_name: str = "gemini-2.5-pro-preview-06-05") -> str:
+async def generate_ai_review_async(prompt_text: str, model_name: str = "gemini-2.5-pro-preview-06-05") -> str:
     """
-    Функция для генерации Google AI анализа кода.
+    НОВАЯ АРХИТЕКТУРА: Асинхронная функция для генерации Google AI анализа кода.
+    
+    Предотвращает блокировку event loop при ожидании ответа от API,
+    что критично для производительности в асинхронной архитектуре.
     
     Args:
         prompt_text: Текст промпта с кодом для анализа
@@ -70,11 +77,16 @@ def generate_ai_review(prompt_text: str, model_name: str = "gemini-2.5-pro-previ
     )
 
     try:
-        # Используем правильный sync API для generate_content
-        response = client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=config,
+        # АРХИТЕКТУРНОЕ УЛУЧШЕНИЕ: Выполняем синхронный вызов в thread pool
+        # чтобы не блокировать event loop
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,  # Используем default thread pool
+            lambda: client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
+            )
         )
         
         # Извлекаем текст из ответа
@@ -85,6 +97,7 @@ def generate_ai_review(prompt_text: str, model_name: str = "gemini-2.5-pro-previ
             
     except Exception as e:
         raise Exception(f"Ошибка при вызове Google AI API: {str(e)}")
+
 
 
 def check_api_key():
