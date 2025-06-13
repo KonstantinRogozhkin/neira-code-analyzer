@@ -6,14 +6,6 @@
 ИСПРАВЛЕНИЕ: Вместо дублирования логики, используем реальное приложение из main.py
 """
 
-import sys
-from pathlib import Path
-
-# Добавляем src в Python path для импорта модулей
-src_path = Path(__file__).parent.parent / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-
 import asyncio
 import argparse
 import logging
@@ -23,7 +15,6 @@ from mcp.server.stdio import stdio_server
 
 # Импортируем реальное приложение
 from neira_code_analyzer.main import create_server as create_real_server
-from neira_code_analyzer.container import setup_container
 
 # Настройка логирования для отладки
 logging.basicConfig(
@@ -56,16 +47,9 @@ async def main():
     logger.info(f"📁 Working directory: {os.getcwd()}")
     logger.info("🔌 Waiting for MCP client connection...")
     
-    # Инициализируем DI контейнер
-    try:
-        setup_container()
-        logger.info("✅ DI Container initialized")
-    except Exception as e:
-        logger.error(f"❌ Failed to setup DI container: {e}")
-        raise
-    
-    # Используем реальное приложение
+    # Используем реальное приложение (DI-контейнер больше не нужен)
     app = create_real_server()
+    logger.info("✅ Server initialized successfully")
     
     try:
         async with stdio_server() as (read_stream, write_stream):

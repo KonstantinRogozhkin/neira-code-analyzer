@@ -21,7 +21,6 @@ import fnmatch
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
-from code2prompt_rs import Code2Prompt
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -56,6 +55,17 @@ app = Server("neira-code-analyzer")
 
 # Реестр инструментов для декоратора
 TOOL_HANDLERS = {}
+
+# 🚀 PERFORMANCE OPTIMIZATION: Кэшированные экземпляры сервисов
+# Создаем экземпляры один раз и переиспользуем для всех запросов
+_services_cache = {}
+
+def get_cached_service(service_name: str, service_class):
+    """Получить кэшированный экземпляр сервиса или создать новый"""
+    if service_name not in _services_cache:
+        _services_cache[service_name] = service_class()
+        logger.debug(f"Created new cached instance for {service_name}")
+    return _services_cache[service_name]
 
 def tool_handler(name: str):
     """
@@ -171,12 +181,20 @@ async def get_context_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Сгенерированный контекст в формате текста
     """
-    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем context_generator напрямую
+    # PERFORMANCE: Используем кэшированный экземпляр
     from .context_generator import ContextGenerator
-    context_generator = ContextGenerator()
+    context_generator = get_cached_service("context_generator", ContextGenerator)
     
-    # Перенаправляем вызов на реализацию в context_generator
-    return await context_generator.get_context(arguments)
+    try:
+        logger.info(f"Delegating context generation to context_generator for path: {arguments.get('path', '.')}")
+        
+        # Делегируем выполнение специализированному модулю
+        response = await context_generator.process_request(**arguments)
+        return [TextContent(type="text", text=response)]
+        
+    except Exception as e:
+        logger.error(f"Error in context tool: {e}")
+        return [TextContent(type="text", text=f"❌ КРИТИЧЕСКАЯ ОШИБКА: {str(e)}")]
 
 @tool_handler("set_filters")
 async def set_filters_tool(arguments: dict) -> list[TextContent]:
@@ -195,9 +213,9 @@ async def set_filters_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Отчет о настройке и сохранении фильтров
     """
-    # Используем новый FilterSetupService вместо устаревшего метода из context_generator  
+    # PERFORMANCE: Используем кэшированный экземпляр  
     from .filter_setup_service import FilterSetupService
-    filter_service = FilterSetupService()
+    filter_service = get_cached_service("filter_service", FilterSetupService)
     
     # Выполняем настройку фильтров через специализированный сервис
     result = await filter_service.setup_project_filters(
@@ -228,9 +246,9 @@ async def get_templates_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Список шаблонов с кратким описанием
     """
-    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем template_manager напрямую
+    # PERFORMANCE: Используем кэшированный экземпляр
     from .template_manager import TemplateManager  
-    template_manager = TemplateManager()
+    template_manager = get_cached_service("template_manager", TemplateManager)
     
     try:
         show_content = arguments.get("show_content", False)
@@ -257,9 +275,9 @@ async def manage_presets_tool(arguments: dict) -> list[TextContent]:
         list[TextContent]: Результат операции с пресетами
     """
     try:
-        # Получаем менеджер пресетов и делегируем ему всю логику
+        # PERFORMANCE: Используем кэшированный экземпляр
         from .filters import FilterPresetManager
-        manager = FilterPresetManager()
+        manager = get_cached_service("filter_manager", FilterPresetManager)
         
         # Делегируем обработку действия менеджеру
         result = manager.handle_action(arguments)
@@ -285,9 +303,9 @@ async def get_analyze_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Результат анализа от Neira
     """
-    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем ai_analyzer напрямую
+    # PERFORMANCE: Используем кэшированный экземпляр
     from .ai_analyzer import NeiraAnalyzer
-    ai_analyzer = NeiraAnalyzer()
+    ai_analyzer = get_cached_service("ai_analyzer", NeiraAnalyzer)
     
     try:
         logger.info(f"Delegating code review to ai_analyzer for path: {arguments.get('path', '.')}")
@@ -318,14 +336,12 @@ async def gen_docs_tool(arguments: dict) -> list[TextContent]:
     Returns:
         list[TextContent]: Отчёт о выполненной работе
     """
-    # АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем docs_generator напрямую
+    # PERFORMANCE: Используем кэшированный экземпляр
     from .docs_generator import DocsGenerator
+    docs_generator = get_cached_service("docs_generator", DocsGenerator)
     
     try:
         logger.info(f"Starting documentation generation for path: {arguments.get('path', '.')}")
-        
-        # Создаем генератор документации напрямую
-        docs_generator = DocsGenerator()
         
         # Делегируем выполнение специализированному модулю
         result_text = await docs_generator.generate_docs(**arguments)

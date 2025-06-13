@@ -176,7 +176,7 @@ class ProjectManager:
                 base_resolved = self.base_analysis_path.resolve()
                 
                 # Если путь не в пределах нашей базовой папки анализа, перенаправляем в безопасное место
-                if not str(resolved_path).startswith(str(base_resolved)):
+                if not resolved_path.is_relative_to(base_resolved):
                     logger.warning(f"Path {resolved_path} is outside analysis base {base_resolved}, redirecting to safe location")
                     # Перенаправляем в безопасную папку
                     safe_filename = self._sanitize_filename(save_path.name)
