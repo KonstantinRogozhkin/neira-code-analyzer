@@ -34,11 +34,12 @@ from mcp.types import (
     TextContent,
 )
 
-# Настройка простого логирования для MCP сервера
+# Настройка простого логирования для MCP сервера  
+# Отключаем вывод в stdout для MCP режима
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)-8s %(message)s",
-    handlers=[logging.StreamHandler()]
+    handlers=[]  # Убираем StreamHandler для MCP режима
 )
 logger = logging.getLogger(__name__)
 
@@ -350,14 +351,6 @@ async def main():
     Инициализирует stdio соединение и запускает сервер для обработки
     запросов от MCP клиентов (Claude Desktop, VS Code, etc).
     """
-    # Загружаем переменные окружения при старте сервера
-    from .ai_utils import load_env_file
-    env_loaded = load_env_file()
-    if env_loaded:
-        logger.info("✅ Переменные окружения загружены из .env файла")
-    else:
-        logger.warning("⚠️ .env файл не найден или не загружен")
-    
     # Добавляем базовое логирование для диагностики с ротацией
     import logging
     import logging.handlers
@@ -375,16 +368,26 @@ async def main():
         backupCount=3
     )
     
+    # Для MCP режима не выводим в stdout, только в файл
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             file_handler,
-            logging.StreamHandler()
+            # Комментируем stdout handler для MCP режима
+            # logging.StreamHandler()
         ]
     )
     
     logger = logging.getLogger(__name__)
+    
+    # Загружаем переменные окружения при старте сервера
+    from .ai_utils import load_env_file
+    env_loaded = load_env_file()
+    if env_loaded:
+        logger.info("✅ Переменные окружения загружены из .env файла")
+    else:
+        logger.warning("⚠️ .env файл не найден или не загружен")
     logger.info("🚀 Neira Code Analyzer MCP Server starting...")
     logger.info(f"📁 Working directory: {os.getcwd()}")
     logger.info("🔌 Waiting for MCP client connection...")
