@@ -73,11 +73,11 @@ async def list_tools() -> list[Tool]:
             ("set_filters", "🎯 Автоматически подбирает оптимальные фильтры для проекта и сохраняет их в .neira. Анализирует структуру проекта, определяет тип (Python, React, etc.), применяет подходящие фильтры и сохраняет конфигурацию для повторного использования."),
             ("get_templates", "🎯 STEP 1: Get list of available professional templates for code analysis. Use this FIRST to see all available templates (code-review, security-audit, documentation, etc.) with descriptions and use cases. Then use 'get_context' with 'template_name' parameter."),
             ("manage_presets", "🎛️ Управление пресетами фильтров: просмотр, создание, удаление, экспорт/импорт сохраненных конфигураций фильтров. Позволяет сохранять удачные комбинации include/exclude паттернов для повторного использования в разных проектах."),
-            ("code_review", "🔍 Автоматический анализ кода через Neira. Запускает set_filters, проверяет количество токенов (до 1 млн), подбирает оптимальные фильтры и выполняет детальный Neira-анализ. Поддерживает различные шаблоны анализа. Сохраняет результаты в файл *.analyze.md.")
+            ("get_analyze", "🔍 Автоматический анализ кода через Neira. Запускает set_filters, проверяет количество токенов (до 1 млн), подбирает оптимальные фильтры и выполняет детальный Neira анализ. Поддерживает различные шаблоны анализа. Сохраняет результаты в файл *.analyze.md.")
         ]
         
         # 🔒 CRITICAL TOOLS: Эти инструменты критичны для работы сервера
-        critical_tools = {"get_context", "code_review"}
+        critical_tools = {"get_context", "get_analyze"}
         
         for tool_name, description in tool_configs:
             try:
@@ -141,7 +141,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         "set_filters": set_filters_tool,
         "get_templates": get_templates_tool,
         "manage_presets": manage_presets_tool,
-        "code_review": code_review_tool
+        "get_analyze": get_analyze_tool
     }
     
     handler = tool_handlers.get(name)
@@ -384,7 +384,7 @@ async def manage_presets_tool(arguments: dict) -> list[TextContent]:
         logger.error(error_msg)
         return [TextContent(type="text", text=error_msg)]
 
-async def code_review_tool(arguments: dict) -> list[TextContent]:
+async def get_analyze_tool(arguments: dict) -> list[TextContent]:
     """
     Автоматический анализ кода через Neira
     
@@ -419,8 +419,13 @@ async def main():
     Инициализирует stdio соединение и запускает сервер для обработки
     запросов от MCP клиентов (Claude Desktop, VS Code, etc).
     """
-    # Добавляем базовое логирование для диагностики
+    # Загружаем переменные окружения при старте сервера
+    from .ai_utils import load_env_file
+    load_env_file()
+    
+    # Добавляем базовое логирование для диагностики с ротацией
     import logging
+    import logging.handlers
     import tempfile
     from pathlib import Path
     
@@ -428,11 +433,18 @@ async def main():
     log_dir = Path(tempfile.gettempdir())
     log_file = log_dir / "neira_mcp_server.log"
     
+    # Создаем обработчик с ротацией: макс 5MB, 3 файла бэкапа
+    file_handler = logging.handlers.RotatingFileHandler(
+        str(log_file), 
+        maxBytes=5*1024*1024,  # 5MB
+        backupCount=3
+    )
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(str(log_file)),
+            file_handler,
             logging.StreamHandler()
         ]
     )
@@ -459,7 +471,7 @@ if __name__ == "__main__":
 Профессиональный анализатор кода с шаблонами для различных типов анализа.
 
 🔗 Подробная документация: docs/help/quickstart.md
-🛠️ Инструменты: set_filters, get_context, get_templates, code_review
+        🛠️ Инструменты: set_filters, get_context, get_templates, get_analyze
 
 Примеры использования и рабочие процессы смотрите в файле quickstart.md
 """

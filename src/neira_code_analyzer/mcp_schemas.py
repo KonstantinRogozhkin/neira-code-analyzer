@@ -320,9 +320,9 @@ def get_manage_presets_schema() -> Dict[str, Any]:
         ]
     }
 
-def get_code_review_schema() -> Dict[str, Any]:
+def get_analyze_schema() -> Dict[str, Any]:
     """
-    Схема для инструмента code_review
+    Схема для инструмента get_analyze
     """
     return {
         "type": "object",
@@ -330,7 +330,7 @@ def get_code_review_schema() -> Dict[str, Any]:
             "path": COMMON_PATH_SCHEMA,
             "template_name": {
                 **TEMPLATE_NAME_SCHEMA,
-                "description": "Template to use for Neira analysis. Each template provides specialized analysis for different purposes.",
+                "description": "Template to use for Neira analysis. Each template provides specialized analysis for different purposes. Examples: 'code-review' - детальный анализ кода, 'security-audit' - проверка безопасности, 'documentation' - создание документации, 'refactoring' - предложения по рефакторингу, 'performance-analysis' - анализ производительности.",
                 "enum": ["code-review", "security-audit", "documentation", "refactoring", "migration-guide", "api-documentation", "performance-analysis"]
             },
             "preset_name": COMMON_PRESET_NAME_SCHEMA,
@@ -350,9 +350,9 @@ def get_code_review_schema() -> Dict[str, Any]:
             },
             "ai_model": {
                 "type": "string",
-                "description": "Neira model to use for analysis. neira-2.5-pro-preview provides the most detailed analysis.",
-                "default": "neira-2.5-pro-preview-06-05",
-                "enum": ["neira-2.5-pro-preview-06-05", "neira-pro", "neira-pro-vision"]
+                                  "description": "Neira model to use for analysis. gemini-2.5-pro-preview provides the most detailed analysis.",
+                "default": "gemini-2.5-pro-preview-06-05",
+                "enum": ["gemini-2.5-pro-preview-06-05", "gemini-2.0-flash", "gemini-1.5-pro"]
             }
         }
     }
@@ -363,7 +363,7 @@ TOOL_SCHEMAS = {
     "set_filters": get_set_filters_schema,
     "get_templates": get_get_templates_schema,
     "manage_presets": get_manage_presets_schema,
-    "code_review": get_code_review_schema
+    "get_analyze": get_analyze_schema
 }
 
 def get_tool_schema(tool_name: str) -> Dict[str, Any]:
