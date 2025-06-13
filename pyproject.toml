@@ -35,3 +35,13 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/neira_code_analyzer"]
+
+[dependency-groups]
+dev = [
+    "aioresponses>=0.7.8",
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+    "responses>=0.25.7",
+]
