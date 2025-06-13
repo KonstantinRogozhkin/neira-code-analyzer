@@ -98,10 +98,18 @@ DEFAULT_EXCLUDES: List[str] = [
     "/Library/", "/Temp/", "/Binaries/", "/Intermediate/", "/Saved/",
     "/tmp/", "/temp/", "/temporary/",
     
-    # Quick Performance Win: дополнительные кэши JS инструментов
+    # Quick Performance Win: дополнительные кэши JS инструментов и современных фреймворков
     "/.nuxt/", ".nuxt/**", 
     "/.vite/", ".vite/**",
     "/.rollup.cache/", ".rollup.cache/**",
+    "/.pnpm-store/", ".pnpm-store/**",
+    "/.turbo/", ".turbo/**",
+    "/.svelte-kit/", ".svelte-kit/**",
+    "/.astro/", ".astro/**",
+    "/.solid/", ".solid/**",
+    "/.angular/", ".angular/**",
+    "/storybook-static/", "storybook-static/**",
+    "/.storybook/public/", ".storybook/public/**",
 ]
 
 # Агрессивные исключения для code review (когда нужно сократить токены)
@@ -297,25 +305,184 @@ class FilterPresetManager:
     
     def delete_preset(self, name: str) -> bool:
         """
-        Удаляет пользовательский пресет
+        Удалить пользовательский пресет
         
         Args:
-            name: Название пресета для удаления
+            name: Имя пресета для удаления
             
         Returns:
-            bool: True если успешно удален
+            bool: True если пресет удален успешно
         """
         # Нельзя удалять встроенные пресеты
         if name in BUILTIN_PRESETS:
-            logger.warning(f"Нельзя удалить встроенный пресет: {name}")
+            logger.warning(f"Cannot delete builtin preset: {name}")
             return False
-        
+            
         if name in self._user_presets:
             del self._user_presets[name]
-            return self._save_user_presets()
+            self._save_user_presets()
+            logger.info(f"Deleted preset: {name}")
+            return True
+        else:
+            logger.warning(f"Preset not found for deletion: {name}")
+            return False
+
+    def handle_action(self, arguments: dict) -> str:
+        """
+        Обрабатывает действия с пресетами (создание, удаление, просмотр и т.д.)
         
-        return False
-    
+        Args:
+            arguments: Словарь с параметрами действия
+            
+        Returns:
+            str: Результат обработки действия
+        """
+        action = arguments.get("action", "list")
+        
+        if action == "list":
+            return self._handle_list_action()
+        elif action == "create":
+            return self._handle_create_action(arguments)
+        elif action == "details":
+            return self._handle_details_action(arguments)
+        elif action == "delete":
+            return self._handle_delete_action(arguments)
+        elif action == "export":
+            return self._handle_export_action(arguments)
+        elif action == "import":
+            return self._handle_import_action(arguments)
+        else:
+            return f"❌ Неизвестное действие: {action}. Доступные: list, create, details, delete, export, import"
+
+    def _handle_list_action(self) -> str:
+        """Обработка действия 'list' - просмотр всех пресетов"""
+        presets = self.list_presets()
+        
+        response = "# 🎛️ Управление пресетами фильтров\n\n"
+        response += f"## 📋 Доступные пресеты ({len(presets)})\n\n"
+        
+        for name, details in presets.items():
+            # Определяем тип пресета
+            if name in BUILTIN_PRESETS:
+                preset_type = "🏗️ Встроенный"
+            else:
+                preset_type = "👤 Пользовательский"
+            
+            description = details.get("description", "Без описания")
+            response += f"### {preset_type}: `{name}`\n"
+            response += f"**Описание:** {description}\n\n"
+        
+        # Инструкции по использованию
+        response += "## 🚀 Как использовать пресеты\n\n"
+        response += "**Загрузка пресета:**\n"
+        response += "```json\n"
+        response += '{"preset_name": "python-project"}\n'
+        response += "```\n\n"
+        
+        response += "**Создание пресета:**\n"
+        response += "```json\n"
+        response += '{\n  "action": "create",\n  "name": "my-preset",\n  "include_patterns": ["*.py", "*.md"],\n  "exclude_patterns": ["tests/**"],\n  "description": "Мой пресет"\n}\n'
+        response += "```\n\n"
+        
+        return response
+
+    def _handle_create_action(self, arguments: dict) -> str:
+        """Обработка действия 'create' - создание нового пресета"""
+        name = arguments.get("name")
+        include_patterns = arguments.get("include_patterns", [])
+        exclude_patterns = arguments.get("exclude_patterns", [])
+        description = arguments.get("description", "")
+        
+        if not name:
+            return "❌ Ошибка: необходимо указать 'name' для создания пресета"
+        
+        success = self.save_preset(name, include_patterns, exclude_patterns, description)
+        
+        if success:
+            response = f"✅ Пресет '{name}' успешно создан!\n\n"
+            response += f"**Описание:** {description}\n"
+            response += f"**Include паттерны:** {include_patterns}\n"
+            response += f"**Exclude паттерны:** {exclude_patterns}\n"
+        else:
+            response = f"❌ Ошибка создания пресета '{name}'"
+            
+        return response
+
+    def _handle_details_action(self, arguments: dict) -> str:
+        """Обработка действия 'details' - подробная информация о пресете"""
+        name = arguments.get("name")
+        if not name:
+            return "❌ Ошибка: необходимо указать 'name' для получения деталей"
+        
+        details = self.get_preset(name)
+        if not details:
+            return f"❌ Пресет '{name}' не найден"
+        
+        response = f"# 🔍 Детали пресета: `{name}`\n\n"
+        response += f"**Описание:** {details['description']}\n\n"
+        
+        if details['include_patterns']:
+            response += "## ✅ Include patterns:\n"
+            for pattern in details['include_patterns']:
+                response += f"- `{pattern}`\n"
+            response += "\n"
+        
+        if details['exclude_patterns']:
+            response += "## ❌ Exclude patterns:\n"
+            for pattern in details['exclude_patterns']:
+                response += f"- `{pattern}`\n"
+            response += "\n"
+        
+        # Метаданные если есть
+        if 'created_at' in details:
+            response += f"**Создан:** {details['created_at']}\n"
+        if 'metadata' in details and details['metadata']:
+            response += f"**Метаданные:** {details['metadata']}\n"
+        
+        return response
+
+    def _handle_delete_action(self, arguments: dict) -> str:
+        """Обработка действия 'delete' - удаление пресета"""
+        name = arguments.get("name")
+        if not name:
+            return "❌ Ошибка: необходимо указать 'name' для удаления"
+        
+        success = self.delete_preset(name)
+        
+        if success:
+            return f"✅ Пресет '{name}' успешно удален"
+        else:
+            return f"❌ Ошибка удаления пресета '{name}' (возможно, это встроенный пресет или он не существует)"
+
+    def _handle_export_action(self, arguments: dict) -> str:
+        """Обработка действия 'export' - экспорт пресета"""
+        name = arguments.get("name")
+        file_path = arguments.get("file_path")
+        
+        if not name or not file_path:
+            return "❌ Ошибка: необходимо указать 'name' и 'file_path' для экспорта"
+        
+        success = self.export_preset(name, file_path)
+        
+        if success:
+            return f"✅ Пресет '{name}' экспортирован в {file_path}"
+        else:
+            return f"❌ Ошибка экспорта пресета '{name}'"
+
+    def _handle_import_action(self, arguments: dict) -> str:
+        """Обработка действия 'import' - импорт пресета"""
+        file_path = arguments.get("file_path")
+        
+        if not file_path:
+            return "❌ Ошибка: необходимо указать 'file_path' для импорта"
+        
+        imported_name = self.import_preset(file_path)
+        
+        if imported_name:
+            return f"✅ Пресет '{imported_name}' успешно импортирован из {file_path}"
+        else:
+            return f"❌ Ошибка импорта пресета из {file_path}"
+
     def export_preset(self, name: str, file_path: str) -> bool:
         """
         Экспортирует пресет в отдельный JSON файл
@@ -342,8 +509,9 @@ class FilterPresetManager:
             ]
             allowed_dirs = [d for d in allowed_dirs if d is not None]
             
+            # Используем pathlib.Path.is_relative_to() для более безопасной проверки пути
             is_allowed = any(
-                str(file_path_resolved).startswith(str(allowed)) 
+                file_path_resolved.is_relative_to(allowed) 
                 for allowed in allowed_dirs
             )
             
@@ -372,82 +540,16 @@ class FilterPresetManager:
         except Exception as e:
             logger.error(f"Ошибка экспорта пресета: {e}")
             return False
-    
-    def import_preset(self, file_path: str) -> Optional[str]:
-        """
-        Импортирует пресет из JSON файла
-        
-        Args:
-            file_path: Путь к файлу с пресетом
-            
-        Returns:
-            str: Название импортированного пресета или None при ошибке
-        """
-        # БЕЗОПАСНОСТЬ: Проверяем что file_path находится в разрешенной зоне
-        try:
-            file_path_resolved = Path(file_path).resolve()
-            # Разрешаем только в поддиректории presets/ или в текущей директории проекта
-            allowed_dirs = [
-                Path.cwd().resolve(),  # Текущая директория
-                Path.cwd().resolve() / "presets",  # Поддиректория presets
-                Path(self.presets_dir).resolve() if self.presets_dir else None
-            ]
-            allowed_dirs = [d for d in allowed_dirs if d is not None]
-            
-            is_allowed = any(
-                str(file_path_resolved).startswith(str(allowed)) 
-                for allowed in allowed_dirs
-            )
-            
-            if not is_allowed:
-                logger.error(f"Небезопасный путь для импорта: {file_path}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Ошибка проверки пути: {e}")
-            return None
-        
-        try:
-            with open(file_path_resolved, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            preset_name = data.get("preset_name")
-            preset_config = data.get("preset_config")
-            
-            if not preset_name or not preset_config:
-                logger.error("Неверный формат файла пресета")
-                return None
-            
-            # БЕЗОПАСНОСТЬ: Проверяем структуру пресета
-            required_keys = {"include_patterns", "exclude_patterns", "description"}
-            if not all(key in preset_config for key in required_keys):
-                logger.error("Неполная структура пресета")
-                return None
-            
-            # Добавляем метаданные об импорте
-            preset_config["metadata"] = preset_config.get("metadata", {})
-            preset_config["metadata"]["imported_at"] = datetime.now().isoformat()
-            preset_config["metadata"]["imported_from"] = str(file_path_resolved)
-            
-            self._user_presets[preset_name] = preset_config
-            
-            if self._save_user_presets():
-                return preset_name
-            
-        except Exception as e:
-            logger.error(f"Ошибка импорта пресета: {e}")
-        
-        return None
 
-# 🏭 ГЛОБАЛЬНЫЙ ЭКЗЕМПЛЯР МЕНЕДЖЕРА
-_preset_manager = None
+# 🏭 ПОЛУЧЕНИЕ МЕНЕДЖЕРА ЧЕРЕЗ DI КОНТЕЙНЕР
 
 def get_preset_manager() -> FilterPresetManager:
-    """Получить глобальный экземпляр менеджера пресетов"""
-    global _preset_manager
-    if _preset_manager is None:
-        _preset_manager = FilterPresetManager()
-    return _preset_manager
+    """
+    Получить экземпляр менеджера пресетов
+    
+    АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Создаем экземпляр напрямую вместо DI-контейнера
+    """
+    return FilterPresetManager()
 
 # 🔧 ОБНОВЛЕННЫЕ ФУНКЦИИ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
 
@@ -523,6 +625,52 @@ def get_preset_details(name: str) -> Optional[Dict[str, Any]]:
     """
     manager = get_preset_manager()
     return manager.get_preset(name)
+
+def resolve_patterns_with_preset(
+    preset_name: Optional[str], 
+    include_patterns: List[str], 
+    exclude_patterns: List[str], 
+    merge_with_preset: bool = False
+) -> Tuple[List[str], List[str]]:
+    """
+    ИСПРАВЛЕНИЕ: Единая функция разрешения паттернов с учетом пресетов
+    
+    Устраняет дублирование логики между ai_analyzer.py, context_generator.py и filter_setup_service.py
+    
+    Args:
+        preset_name: Название пресета
+        include_patterns: Пользовательские include паттерны
+        exclude_patterns: Пользовательские exclude паттерны
+        merge_with_preset: Объединять ли с пресетом (True) или заменить (False)
+        
+    Returns:
+        Tuple[List[str], List[str]]: (final_include, final_exclude)
+    """
+    logger.info(f"Resolving patterns with preset: {preset_name}, merge: {merge_with_preset}")
+    
+    final_include = include_patterns.copy()
+    final_exclude = exclude_patterns.copy()
+    
+    if preset_name:
+        preset_patterns = load_preset(preset_name)
+        if preset_patterns:
+            preset_include, preset_exclude = preset_patterns
+            
+            if merge_with_preset:
+                # Объединяем с пользовательскими паттернами, убираем дубликаты
+                final_include = list(set(preset_include + include_patterns))
+                final_exclude = list(set(preset_exclude + exclude_patterns))
+                logger.info(f"Merged preset '{preset_name}' with custom patterns")
+            else:
+                # Заменяем пользовательские паттерны на пресет
+                final_include = preset_include
+                final_exclude = preset_exclude
+                logger.info(f"Using preset '{preset_name}' patterns (replacement mode)")
+        else:
+            logger.warning(f"Preset '{preset_name}' not found, using custom patterns")
+    
+    logger.info(f"Final patterns - include: {len(final_include)}, exclude: {len(final_exclude)}")
+    return final_include, final_exclude
 
 def create_project_preset(project_path: str, include_patterns: List[str], 
                          exclude_patterns: List[str], 
