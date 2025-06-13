@@ -1,1 +1,1 @@
-docs/help/quickstart.md
+help/quickstart.md
