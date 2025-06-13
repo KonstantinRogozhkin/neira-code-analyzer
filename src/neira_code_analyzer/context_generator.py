@@ -611,222 +611,110 @@ class ContextGenerator:
         
         return recommendations
 
-    async def analyze_filters(self, arguments: dict) -> AnalysisResult:
-        """
-        Анализ фильтров - возвращает структурированный результат
-        
-        Returns:
-            AnalysisResult: Структурированные данные анализа вместо TextContent
-        """
-        
-        path = arguments.get("path", ".")
-        preset_name = arguments.get("preset_name")
-        include_patterns = arguments.get("include_patterns", [])
-        exclude_patterns = arguments.get("exclude_patterns", [])
-        merge_with_preset = arguments.get("merge_with_preset", False)
-        save_as_preset = arguments.get("save_as_preset")
-        
-        # Разрешаем паттерны с учетом пресетов
-        if preset_name:
-            from .filters import load_preset
-            preset_patterns = load_preset(preset_name)
-            if preset_patterns:
-                preset_include, preset_exclude = preset_patterns
-                
-                if merge_with_preset:
-                    # Объединяем с пользовательскими паттернами
-                    include_patterns = list(set(preset_include + include_patterns))
-                    exclude_patterns = list(set(preset_exclude + exclude_patterns))
-                    logger.info(f"Merged preset '{preset_name}' with custom patterns for analysis")
-                else:
-                    # Полная замена
-                    include_patterns = preset_include
-                    exclude_patterns = preset_exclude
-                    logger.info(f"Using preset '{preset_name}' patterns for analysis")
-            else:
-                logger.warning(f"Preset '{preset_name}' not found, using original patterns")
-        show_top_files = arguments.get("show_top_files", 10)
-        encoding = arguments.get("encoding", "cl100k")
-        
-        logger.info(f"Analyzing filters for {path}")
-        
-        try:
-            # Создаем объект промпта с расширенными возможностями
-            prompt = self._create_code2prompt(
-                path=path,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-                line_numbers=False,
-                absolute_paths=False,
-                full_directory_tree=False,
-                code_blocks=False,
-                include_priority=False,
-                follow_symlinks=False,
-                include_hidden=False,
-            )
-            
-            # Получаем статистику файлов через session
-            session = prompt.session()
-            # Генерируем промпт для получения статистики
-            result = prompt.generate(encoding=encoding)
-            
-            # Создаем простую статистику из результата
-            stats = self._create_simple_stats(result, path)
-            
-            # Формируем markdown отчет
-            response = "# 📊 Анализ фильтров кода\n\n"
-            
-            # Добавляем явное предупреждение если детальная статистика недоступна
-            if stats.file_type_stats is None or stats.top_files_by_size is None:
-                response += "## ⚠️ Внимание: Детальная статистика недоступна\n\n"
-                response += "**📋 Ограничение библиотеки:** code2prompt-rs не смогла предоставить разбивку по файлам для текущей конфигурации. Общие метрики (токены, файлы) корректны, но рекомендации по оптимизации могут быть неточными.\n\n"
-                response += "**💡 Рекомендации:**\n"
-                response += "- Используйте встроенные пресеты (`default`, `python-project`, `react-app`)\n"
-                response += "- Попробуйте более простые паттерны фильтрации\n"
-                response += "- Общие метрики всё равно точны и полезны\n\n"
-                response += "---\n\n"
-            
-            response += f"**🎯 Общие токены:** {stats.total_tokens:,}\n"
-            # Выводим количество файлов только если оно известно
-            if stats.total_files is not None:
-                response += f"**📁 Всего файлов:** {stats.total_files:,}\n"
-            else:
-                response += f"**📁 Всего файлов:** *(неизвестно - детальная статистика недоступна)*\n"
-            response += f"**📏 Всего символов:** {stats.total_characters:,}\n"
-            response += f"**🔢 Всего строк:** {stats.total_lines:,}\n\n"
-            
-            # Топ файлов по размеру
-            if stats.top_files_by_size:
-                response += f"## 🔝 Топ-{min(show_top_files, len(stats.top_files_by_size))} файлов по размеру\n\n"
-                for i, file_info in enumerate(stats.top_files_by_size[:show_top_files], 1):
-                    response += f"{i}. **{file_info.file_path}**\n"
-                    response += f"   - Токены: {file_info.tokens:,}\n"
-                    response += f"   - Символы: {file_info.characters:,}\n"
-                    response += f"   - Строки: {file_info.lines:,}\n\n"
-            
-            # Статистика по расширениям
-            if stats.file_type_stats:
-                response += "## 📋 Статистика по типам файлов\n\n"
-                response += "| Расширение | Файлы | Токены | Символы | Строки |\n"
-                response += "|------------|-------|--------|---------|--------|\n"
-                
-                # Сортируем по количеству токенов
-                sorted_stats = sorted(stats.file_type_stats.items(), 
-                                    key=lambda x: x[1].total_tokens, reverse=True)
-                
-                for ext, ext_stats in sorted_stats:
-                    ext_display = ext if ext else "*(без расширения)*"
-                    response += f"| {ext_display} | {ext_stats.total_files} | {ext_stats.total_tokens:,} | {ext_stats.total_characters:,} | {ext_stats.total_lines:,} |\n"
-                
-                response += "\n"
-            else:
-                response += "## ℹ️ Статистика по типам файлов недоступна\n\n"
-                response += "**📋 Детальная информация недоступна:** Библиотека code2prompt-rs не предоставила разбивку по файлам.\n"
-                response += "**💡 Это означает:** общие метрики (токены, файлы) точны, но распределение по типам файлов неизвестно.\n"
-                response += "**✅ Решение:** используйте базовые рекомендации и проверяйте результаты через обычные инструменты анализа кода.\n\n"
-            
-            # Проактивные рекомендации по оптимизации (Quick Performance Win)
-            if stats.file_type_stats:
-                response += self._generate_optimization_recommendations(
-                    stats, include_patterns, exclude_patterns, path
-                )
-            else:
-                response += "## 💡 Рекомендации по оптимизации\n\n"
-                response += "⚠️ **Детальная статистика по файлам недоступна.** Невозможно дать точные рекомендации по оптимизации.\n\n"
-                response += "**🔧 Общие рекомендации для оптимизации:**\n"
-                response += "- Используйте базовые исключения: `node_modules/**`, `dist/**`, `__pycache__/**`\n"
-                response += "- Исключите файлы тестов: `tests/**`, `*.test.js`, `*.spec.ts`\n"
-                response += "- Уберите lock-файлы: `package-lock.json`, `yarn.lock`, `poetry.lock`\n"
-                response += "- Исключите медиа и шрифты: `*.png`, `*.jpg`, `*.woff`, `*.ttf`\n\n"
-            
-            # Информация о фильтрах
-            response += "## ⚙️ Примененные фильтры\n\n"
-            
-            if include_patterns:
-                response += "### ✅ Include patterns:\n"
-                for pattern in include_patterns:
-                    response += f"- `{pattern}`\n"
-                response += "\n"
-            else:
-                response += "### ✅ Include patterns: *(все файлы)*\n\n"
-            
-            if exclude_patterns:
-                response += "### ❌ Exclude patterns:\n"
-                for pattern in exclude_patterns:
-                    response += f"- `{pattern}`\n"
-                response += "\n"
-            else:
-                response += "### ❌ Exclude patterns: *(нет исключений)*\n\n"
-            
-            logger.info(f"Filter analysis completed: {stats.total_files} files, {stats.total_tokens:,} tokens")
-            
-            # Сохраняем как пресет если указано
-            if save_as_preset:
-                from .filters import save_preset
-                description = f"Пресет, созданный из анализа проекта {Path(path).name} ({stats.total_tokens:,} токенов)"
-                success = save_preset(
-                    save_as_preset, 
-                    include_patterns, 
-                    exclude_patterns, 
-                    description,
-                    project_path=path,
-                    token_count=stats.total_tokens,
-                    created_from_analysis=True
-                )
-                
-                if success:
-                    response += f"\n## ✅ Пресет сохранен\n\n"
-                    response += f"**Название:** `{save_as_preset}`\n"
-                    response += f"**Описание:** {description}\n\n"
-                    logger.info(f"Пресет '{save_as_preset}' успешно сохранен")
-                else:
-                    response += f"\n## ❌ Ошибка сохранения пресета\n\n"
-                    response += f"Не удалось сохранить пресет `{save_as_preset}`\n\n"
-                    logger.error(f"Не удалось сохранить пресет '{save_as_preset}'")
-            
-            # Возвращаем структурированный результат
-            return AnalysisResult(
-                total_tokens=stats.total_tokens,
-                total_files=stats.total_files if stats.total_files is not None else 0,  # Конвертируем None в 0 для совместимости
-                markdown_report=response,
-                file_stats={
-                    'total_characters': stats.total_characters,
-                    'total_lines': stats.total_lines,
-                    'file_type_stats': stats.file_type_stats,
-                    'top_files_by_size': stats.top_files_by_size or []
-                }
-            )
-            
-        except Exception as e:
-            error_msg = f"❌ Ошибка анализа фильтров: {str(e)}"
-            logger.error(error_msg)
-            # Возвращаем структурированную ошибку
-            return AnalysisResult(
-                total_tokens=0,
-                total_files=0,
-                markdown_report=error_msg
-            )
+    # УДАЛЕН: God Method analyze_filters (196 строк) - логика перенесена в FilterAnalyzer и AnalysisReporter
+    # Используйте FilterAnalyzer.analyze() и AnalysisReporter.generate_report() вместо этого метода
 
     async def analyze_filters_tool(self, arguments: dict) -> list[TextContent]:
         """
-        MCP обертка для analyze_filters - для совместимости с MCP интерфейсом
+        MCP обертка для анализа фильтров - переписано для использования новой архитектуры
+        
+        АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Использует FilterAnalyzer + AnalysisReporter вместо God Method
         
         ⚠️ УСТАРЕВШИЙ ИНСТРУМЕНТ: Рекомендуется использовать `set_filters` для настройки фильтров.
         `analyze_filters` предназначен только для отладки и анализа существующих конфигураций.
         
         Для полного AI анализа используйте `get_analyze`.
         """
-        result = await self.analyze_filters(arguments)
-        
-        # Добавляем предупреждение в начало отчёта
-        deprecated_warning = "## ⚠️ Устаревший инструмент\n\n"
-        deprecated_warning += "**Этот инструмент устарел.** Рекомендуется использовать:\n"
-        deprecated_warning += "- **`set_filters`** - для настройки и оптимизации фильтров\n"
-        deprecated_warning += "- **`get_analyze`** - для полного автоматического AI анализа кода\n\n"
-        deprecated_warning += "---\n\n"
-        
-        enhanced_report = deprecated_warning + result.markdown_report
-        return [TextContent(type="text", text=enhanced_report)]
+        try:
+            # ИСПРАВЛЕНО: Используем новые специализированные сервисы вместо God Method
+            from .filter_analyzer import FilterAnalyzer  
+            from .analysis_reporter import AnalysisReporter
+            
+            # Создаем экземпляры сервисов
+            analyzer = FilterAnalyzer()
+            reporter = AnalysisReporter()
+            
+            # Извлекаем параметры
+            path = arguments.get("path", ".")
+            include_patterns = arguments.get("include_patterns", [])
+            exclude_patterns = arguments.get("exclude_patterns", [])
+            encoding = arguments.get("encoding", "cl100k")
+            
+            # Обрабатываем пресеты если указаны
+            preset_name = arguments.get("preset_name")
+            merge_with_preset = arguments.get("merge_with_preset", False)
+            
+            if preset_name:
+                from .filters import load_preset
+                preset_patterns = load_preset(preset_name)
+                if preset_patterns:
+                    preset_include, preset_exclude = preset_patterns
+                    
+                    if merge_with_preset:
+                        include_patterns = list(set(preset_include + include_patterns))
+                        exclude_patterns = list(set(preset_exclude + exclude_patterns))
+                        logger.info(f"Merged preset '{preset_name}' with custom patterns")
+                    else:
+                        include_patterns = preset_include
+                        exclude_patterns = preset_exclude
+                        logger.info(f"Using preset '{preset_name}' patterns")
+                else:
+                    logger.warning(f"Preset '{preset_name}' not found, using original patterns")
+            
+            # Выполняем анализ через новый сервис
+            analysis_result = await analyzer.analyze(
+                path=path,
+                include_patterns=include_patterns, 
+                exclude_patterns=exclude_patterns,
+                encoding=encoding
+            )
+            
+            if not analysis_result.success:
+                return [TextContent(type="text", text=f"❌ {analysis_result.error_message}")]
+            
+            # Генерируем отчет через новый сервис
+            report = reporter.generate_report(analysis_result)
+            
+            # Обрабатываем сохранение пресета если указано
+            save_as_preset = arguments.get("save_as_preset")
+            if save_as_preset:
+                from .filters import save_preset
+                from pathlib import Path  # Импорт для работы с путями
+                description = f"Пресет, созданный из анализа проекта {Path(path).name} ({analysis_result.total_tokens:,} токенов)"
+                success = save_preset(
+                    save_as_preset,
+                    include_patterns,
+                    exclude_patterns,
+                    description,
+                    project_path=path,
+                    token_count=analysis_result.total_tokens,
+                    created_from_analysis=True
+                )
+                
+                if success:
+                    report += f"\n\n## ✅ Пресет сохранен\n\n"
+                    report += f"**Название:** `{save_as_preset}`\n"
+                    report += f"**Описание:** {description}\n"
+                    logger.info(f"Пресет '{save_as_preset}' успешно сохранен")
+                else:
+                    report += f"\n\n## ❌ Ошибка сохранения пресета\n\n"
+                    report += f"Не удалось сохранить пресет `{save_as_preset}`\n"
+                    logger.error(f"Не удалось сохранить пресет '{save_as_preset}'")
+            
+            # Добавляем предупреждение в начало отчёта
+            deprecated_warning = "## ⚠️ Устаревший инструмент\n\n"
+            deprecated_warning += "**Этот инструмент устарел.** Рекомендуется использовать:\n"
+            deprecated_warning += "- **`set_filters`** - для настройки и оптимизации фильтров\n"
+            deprecated_warning += "- **`get_analyze`** - для полного автоматического AI анализа кода\n\n"
+            deprecated_warning += "---\n\n"
+            
+            enhanced_report = deprecated_warning + report
+            return [TextContent(type="text", text=enhanced_report)]
+            
+        except Exception as e:
+            error_msg = f"❌ Ошибка анализа фильтров: {str(e)}"
+            logger.error(error_msg)
+            return [TextContent(type="text", text=error_msg)]
 
     async def get_context(self, arguments: dict) -> list[TextContent]:
         """

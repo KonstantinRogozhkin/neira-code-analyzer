@@ -33,8 +33,10 @@ TOOLS_REQUEST = {
     "params": {}
 }
 
-# Команда для запуска MCP сервера
+# ИСПРАВЛЕНО: Команда для запуска MCP сервера (централизована в pyproject.toml)
+# Использует: [tool.rye.scripts] serve = "python -m src.neira_code_analyzer.main"
 SERVER_START_COMMAND = ("uv", "run", "python", "-m", "src.neira_code_analyzer.main")
+MINIMAL_SERVER_COMMAND = ("uv", "run", "python", "tools/minimal_mcp_test.py")
 
 DEFAULT_TIMEOUT = 10.0
 
@@ -110,25 +112,39 @@ def _build_tools_request() -> Dict[str, Any]:
     """Создает запрос списка инструментов"""
     return TOOLS_REQUEST.copy()
 
-async def _start_mcp_server() -> Optional[asyncio.subprocess.Process]:
+def _get_server_command(use_minimal: bool = False) -> tuple:
+    """Возвращает команду для запуска сервера"""
+    return MINIMAL_SERVER_COMMAND if use_minimal else SERVER_START_COMMAND
+
+async def _start_mcp_server(use_minimal: bool = False) -> Optional[asyncio.subprocess.Process]:
     """
     Запускает MCP сервер используя константу SERVER_START_COMMAND
+    
+    Args:
+        use_minimal: Если True, запускает минимальный тестовый сервер
     
     Returns:
         Процесс сервера или None при ошибке
     """
     try:
-        print("🚀 Запуск MCP сервера...")
+        command = _get_server_command(use_minimal)
+        server_type = "минимальный тестовый" if use_minimal else "основной"
+        print(f"🚀 Запуск {server_type} MCP сервера...")
         
-        # Используем константу для консистентности
+        # Используем выбранную команду
+        # ИСПРАВЛЕНИЕ: Перенаправляем stderr в stdout для диагностики
         process = await asyncio.create_subprocess_exec(
-            *SERVER_START_COMMAND,
+            *command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.STDOUT  # Перенаправляем stderr в stdout
         )
         
         print(f"✅ Сервер запущен (PID: {process.pid})")
+        
+        # Ждем немного чтобы сервер запустился
+        await asyncio.sleep(0.5)
+        
         return process
         
     except Exception as e:
@@ -153,6 +169,29 @@ async def _test_initialization(process: asyncio.subprocess.Process) -> bool:
     print(f"   Версия протокола: {init_response['result'].get('protocolVersion', 'неизвестно')}")
     return True
 
+async def _read_server_logs(process: asyncio.subprocess.Process) -> str:
+    """
+    Читает доступные логи из stdout/stderr сервера
+    
+    Returns:
+        str: Логи сервера
+    """
+    logs = ""
+    try:
+        # Пытаемся прочитать все доступные данные без блокировки
+        while True:
+            try:
+                line = await asyncio.wait_for(process.stdout.readline(), timeout=0.1)
+                if not line:
+                    break
+                logs += line.decode().strip() + "\n"
+            except asyncio.TimeoutError:
+                break
+    except Exception as e:
+        logs += f"Ошибка чтения логов: {e}\n"
+    
+    return logs
+
 async def _test_tools_list(process: asyncio.subprocess.Process) -> bool:
     """
     Тестирует получение списка инструментов
@@ -163,6 +202,17 @@ async def _test_tools_list(process: asyncio.subprocess.Process) -> bool:
     print("🔧 Запрос списка инструментов...")
     tools_request = _build_tools_request()
     tools_response = await send_mcp_request(process, tools_request)
+    
+    # ИСПРАВЛЕНИЕ: Если произошел таймаут, читаем логи сервера
+    if not tools_response:
+        print("🔍 Чтение логов сервера для диагностики...")
+        server_logs = await _read_server_logs(process)
+        if server_logs:
+            print("📄 Логи сервера:")
+            print(server_logs)
+        else:
+            print("📄 Логи сервера пусты")
+        return False
     
     if not await _validate_mcp_response(tools_response, "Получение списка инструментов"):
         return False
@@ -191,12 +241,13 @@ async def _cleanup_server(process: asyncio.subprocess.Process) -> None:
     except Exception as e:
         print(f"❌ Ошибка при завершении сервера: {e}")
 
-async def test_mcp_server():
+async def test_mcp_server(use_minimal: bool = False):
     """Основная функция тестирования MCP сервера"""
-    print("🧪 Тестирование MCP сервера neira-code-analyzer\n")
+    server_type = "минимального тестового" if use_minimal else "основного"
+    print(f"🧪 Тестирование {server_type} MCP сервера neira-code-analyzer\n")
     
     # Запускаем сервер
-    process = await _start_mcp_server()
+    process = await _start_mcp_server(use_minimal)
     if not process:
         return False
     
@@ -209,7 +260,7 @@ async def test_mcp_server():
         # Тестируем получение списка инструментов
         tools_success = await _test_tools_list(process)
         
-        print(f"\n📊 Результат тестирования:")
+        print(f"\n📊 Результат тестирования {server_type} сервера:")
         print(f"   Инициализация: {'✅ ОК' if init_success else '❌ ОШИБКА'}")
         print(f"   Список инструментов: {'✅ ОК' if tools_success else '❌ ОШИБКА'}")
         
@@ -224,8 +275,13 @@ async def test_mcp_server():
 
 def main():
     """Точка входа для запуска тестов"""
+    import sys
+    
+    # Проверяем аргументы командной строки
+    use_minimal = len(sys.argv) > 1 and sys.argv[1] == "--minimal"
+    
     try:
-        success = asyncio.run(test_mcp_server())
+        success = asyncio.run(test_mcp_server(use_minimal))
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
         print("\n⚠️ Тестирование прервано пользователем")

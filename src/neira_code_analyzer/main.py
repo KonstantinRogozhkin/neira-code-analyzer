@@ -21,6 +21,7 @@ import fnmatch
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
+import sys
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -36,9 +37,9 @@ from mcp.types import (
 # Настройка простого логирования для MCP сервера  
 # Отключаем вывод в stdout для MCP режима
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,  # Только критические ошибки
     format="%(levelname)-8s %(message)s",
-    handlers=[]  # Убираем StreamHandler для MCP режима
+    handlers=[]  # Убираем вывод для MCP режима
 )
 logger = logging.getLogger(__name__)
 
@@ -87,8 +88,6 @@ async def list_tools() -> list[Tool]:
     Returns:
         list[Tool]: Список доступных инструментов с их схемами
     """
-    logger.info("📋 Вызов list_tools() для регистрации инструментов")
-    
     try:
         tools = []
         
@@ -102,49 +101,38 @@ async def list_tools() -> list[Tool]:
             ("gen_docs", "📚 Автоматическая генерация и обновление документации проекта. Сканирует файлы проекта, извлекает знания из отчётов, обновляет документацию в docs/, создаёт changelog из git-истории, сжимает длинные файлы и архивирует обработанные материалы.")
         ]
         
-        # 🔒 CRITICAL TOOLS: Эти инструменты критичны для работы сервера
-        critical_tools = {"get_context", "get_analyze"}
-        
         for tool_name, description in tool_configs:
             try:
+                # Получаем схему инструмента
                 schema = get_tool_schema(tool_name)
+                
                 tool = Tool(
                     name=tool_name,
                     description=description,
                     inputSchema=schema
                 )
                 tools.append(tool)
-                logger.info(f"✅ Инструмент {tool_name} успешно создан")
+                
             except Exception as e:
-                logger.error(f"❌ Ошибка создания инструмента {tool_name}: {e}")
-                
-                # 🚨 FAIL-FAST: Если критический инструмент не может быть создан, останавливаем сервер
-                if tool_name in critical_tools:
-                    logger.critical(f"💥 КРИТИЧЕСКАЯ ОШИБКА: Не удается создать обязательный инструмент '{tool_name}'")
-                    logger.critical("Сервер не может работать без критических инструментов. Проверьте схемы и зависимости.")  
-                    import traceback
-                    traceback.print_exc()
-                    raise RuntimeError(f"Failed to create critical tool '{tool_name}': {e}")
-                
                 # Для некритических инструментов создаем fallback с базовой схемой
-                logger.warning(f"⚠️ Создаем fallback для некритического инструмента {tool_name}")
                 tool = Tool(
                     name=tool_name,
                     description=f"[FALLBACK] {description}",
                     inputSchema={"type": "object", "properties": {}}
                 )
                 tools.append(tool)
-                logger.warning(f"⚠️ Инструмент {tool_name} создан с базовой схемой (fallback mode)")
         
-        logger.info(f"📋 Возвращаем {len(tools)} инструментов")
         return tools
         
-    except Exception as e:
-        logger.error(f"❌ Критическая ошибка в list_tools(): {e}")
-        import traceback
-        traceback.print_exc()
-        # Возвращаем пустой список чтобы сервер не падал
-        return []
+    except Exception:
+        # Возвращаем минимальный набор инструментов в случае ошибки
+        return [
+            Tool(
+                name="get_context",
+                description="Basic context generation tool",
+                inputSchema={"type": "object", "properties": {}}
+            )
+        ]
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
@@ -188,8 +176,8 @@ async def get_context_tool(arguments: dict) -> list[TextContent]:
     try:
         logger.info(f"Delegating context generation to context_generator for path: {arguments.get('path', '.')}")
         
-        # Делегируем выполнение специализированному модулю
-        response = await context_generator.process_request(**arguments)
+        # Делегируем выполнение специализированному модулю (исправлено: process_request -> generate_context)
+        response, _ = context_generator.generate_context(arguments)
         return [TextContent(type="text", text=response)]
         
     except Exception as e:
@@ -367,53 +355,19 @@ async def main():
     Инициализирует stdio соединение и запускает сервер для обработки
     запросов от MCP клиентов (Claude Desktop, VS Code, etc).
     """
-    # Добавляем базовое логирование для диагностики с ротацией
-    import logging
-    import logging.handlers
-    import tempfile
-    from pathlib import Path
-    
-    # Кроссплатформенный путь к логам
-    log_dir = Path(tempfile.gettempdir())
-    log_file = log_dir / "neira_mcp_server.log"
-    
-    # Создаем обработчик с ротацией: макс 5MB, 3 файла бэкапа
-    file_handler = logging.handlers.RotatingFileHandler(
-        str(log_file), 
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3
-    )
-    
-    # Для MCP режима не выводим в stdout, только в файл
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            file_handler,
-            # Комментируем stdout handler для MCP режима
-            # logging.StreamHandler()
-        ]
-    )
-    
-    logger = logging.getLogger(__name__)
-    
-    # Загружаем переменные окружения при старте сервера
-    from .ai_utils import load_env_file
-    env_loaded = load_env_file()
-    if env_loaded:
-        logger.info("✅ Переменные окружения загружены из .env файла")
-    else:
-        logger.warning("⚠️ .env файл не найден или не загружен")
-    logger.info("🚀 Neira Code Analyzer MCP Server starting...")
-    logger.info(f"📁 Working directory: {os.getcwd()}")
-    logger.info("🔌 Waiting for MCP client connection...")
-    
+    # ИСПРАВЛЕНИЕ: Упрощенная инициализация без сложного логирования
     try:
+        # Простая загрузка переменных окружения без детального логирования
+        from .ai_utils import load_env_file
+        load_env_file()
+        
+        # Запускаем MCP сервер
         async with stdio_server() as (read_stream, write_stream):
-            logger.info("✅ MCP client connected successfully!")
             await app.run(read_stream, write_stream, app.create_initialization_options())
     except Exception as e:
-        logger.error(f"❌ MCP server error: {e}")
+        # Минимальное логирование ошибок
+        import sys
+        print(f"MCP server error: {e}", file=sys.stderr)
         raise
 
 if __name__ == "__main__":

@@ -14,32 +14,23 @@ from google.genai import types
 def load_env_file():
     """
     Загружает переменные окружения из .env файла
-    Использует стандартную библиотеку python-dotenv для надёжности
+    
+    ИСПРАВЛЕНО: Упрощено для использования встроенного поиска dotenv
+    Стандартный load_dotenv() уже эффективно ищет файл в текущей и родительских директориях.
     """
     try:
         from dotenv import load_dotenv
         
-        # Ищем .env файлы в текущей директории и корне проекта
-        env_paths = [
-            Path(".env"),  # Текущая директория
-            Path(__file__).parent.parent.parent / ".env",  # Корень проекта
-        ]
-        
-        for env_path in env_paths:
-            if env_path.exists():
-                load_dotenv(env_path)
-                print(f"✅ Загружены переменные окружения из {env_path}")
-                return True
-        
-        # Если конкретные файлы не найдены, попробуем автопоиск
+        # ИСПРАВЛЕНО: Используем единственный вызов load_dotenv() - он сам найдет .env файл
         if load_dotenv():
             print("✅ Загружены переменные окружения из .env")
             return True
+        else:
+            print("⚠️ .env файл не найден или пустой")
+            return False
             
-        return False
-        
     except ImportError:
-        print("⚠️ python-dotenv не установлен, используем базовую загрузку")
+        print("⚠️ python-dotenv не установлен, переменные окружения не загружены")
         return False
     except Exception as e:
         print(f"⚠️ Ошибка при загрузке .env файла: {e}")

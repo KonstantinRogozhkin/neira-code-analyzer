@@ -25,6 +25,11 @@ build-backend = "hatchling.build"
 managed = true
 dev-dependencies = []
 
+[tool.rye.scripts]
+# ИСПРАВЛЕНО: Центральная команда запуска для устранения дублирования
+serve = "python -m src.neira_code_analyzer.main"
+debug = "python -m src.neira_code_analyzer.main"
+
 [tool.hatch.metadata]
 allow-direct-references = true
 

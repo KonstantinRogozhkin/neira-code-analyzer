@@ -18,8 +18,11 @@ def _get_available_presets() -> List[str]:
     try:
         from .filters import list_available_presets
         return list(list_available_presets().keys())
-    except Exception:
-        # Fallback для случая ошибок
+    except Exception as e:
+        # ИСПРАВЛЕНО: Логируем критическую ошибку вместо тихого fallback
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.critical(f"Failed to load filter presets: {e}. Using fallback presets.")
         return ["default", "aggressive", "code-only", "python-project", "web-app", "react-app", "electron-app"]
 
 def _get_available_templates() -> List[str]:
@@ -31,8 +34,11 @@ def _get_available_templates() -> List[str]:
         from .template_manager import TemplateManager
         manager = TemplateManager()
         return manager.get_available_templates()
-    except Exception:
-        # Fallback для случая ошибок
+    except Exception as e:
+        # ИСПРАВЛЕНО: Логируем критическую ошибку вместо тихого fallback
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.critical(f"Failed to load templates: {e}. Using fallback templates.")
         return ["code-review", "security-audit", "documentation", "refactoring", "migration-guide", "api-documentation", "performance-analysis"]
 
 # 🎯 Общие схемы параметров для переиспользования

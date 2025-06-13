@@ -15,9 +15,9 @@ async def test_gen_docs():
     print("=" * 50)
     
     try:
-        # Тестируем gen_docs
+        # Тестируем gen_docs (исправлено: используем относительный путь)
         result = await gen_docs_tool({
-            'path': '/Users/konstantin/Projects/neira-code-analyzer',
+            'path': '.',
             'docs_structure': 'standard',
             'target_guide_length': 100
         })
