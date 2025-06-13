@@ -352,7 +352,11 @@ async def main():
     """
     # Загружаем переменные окружения при старте сервера
     from .ai_utils import load_env_file
-    load_env_file()
+    env_loaded = load_env_file()
+    if env_loaded:
+        logger.info("✅ Переменные окружения загружены из .env файла")
+    else:
+        logger.warning("⚠️ .env файл не найден или не загружен")
     
     # Добавляем базовое логирование для диагностики с ротацией
     import logging

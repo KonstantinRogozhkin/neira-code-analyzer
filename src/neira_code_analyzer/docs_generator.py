@@ -38,7 +38,7 @@ class DocsGenerator:
         """Инициализация с использованием нового DocsAgent"""
         self.docs_agent = DocsAgent()
         self.logger = logging.getLogger(self.__class__.__name__)
-    
+        
     async def generate_docs(self, 
                           path: str = ".",
                           docs_structure: str = "standard",

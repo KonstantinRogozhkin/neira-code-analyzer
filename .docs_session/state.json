@@ -1,0 +1,20 @@
+{
+  "session_id": "20250613_120207",
+  "project_path": "/Users/konstantin/Projects/neira-code-analyzer",
+  "step": 1,
+  "status": "executing",
+  "params": {
+    "docs_structure": "standard",
+    "scan_depth": 3,
+    "max_file_size": 400,
+    "archive_processed": true,
+    "update_changelog": true,
+    "git_scan_days": 14,
+    "compress_guides": true,
+    "target_guide_length": 150
+  },
+  "completed_steps": [],
+  "ai_model": "gemini-2.5-pro-preview-06-05",
+  "created_at": "2025-06-13T12:02:07.469209",
+  "updated_at": "2025-06-13T12:03:10.419574"
+}

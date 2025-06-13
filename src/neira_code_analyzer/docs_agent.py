@@ -1,14 +1,16 @@
 """
-DocsAgent - умный оркестратор генерации документации
+DocsAgent - умный оркестратор генерации документации с ИИ
 
-Основной класс-оркестратор, который координирует работу DocsSessionManager 
-и ActionExecutor. Использует JSON контракт с ИИ вместо хрупкого парсинга текста.
+Отвечает за:
+- Координацию процесса генерации документации
+- JSON контракт с ИИ
+- Интеграцию с DocsSessionManager и ActionExecutor
 """
 
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
 from .docs_session_manager import DocsSessionManager, SessionState
@@ -26,34 +28,109 @@ class AIResponse:
     
     @classmethod
     def from_json(cls, json_data: str) -> 'AIResponse':
-        """Создает объект из JSON строки"""
+        """Создает объект из JSON строки с улучшенной обработкой ошибок"""
         try:
-            data = json.loads(json_data)
+            # Проверяем что данные не пустые
+            if not json_data or not json_data.strip():
+                logger.error("Получена пустая строка от ИИ")
+                return cls(
+                    status='error',
+                    next_steps=[],
+                    summary="ИИ вернул пустой ответ",
+                    analysis="Нет данных для обработки"
+                )
+            
+            # Логируем полученные данные для отладки
+            logger.debug(f"Parsing AI response (first 200 chars): {json_data[:200]}")
+            
+            # Очищаем ответ от markdown форматирования
+            cleaned_data = json_data.strip()
+            if cleaned_data.startswith('```json'):
+                # Убираем ```json в начале и ``` в конце
+                cleaned_data = cleaned_data[7:]  # Убираем ```json
+                if cleaned_data.endswith('```'):
+                    cleaned_data = cleaned_data[:-3]  # Убираем ```
+                cleaned_data = cleaned_data.strip()
+            elif cleaned_data.startswith('```'):
+                # Убираем просто ``` в начале и конце
+                cleaned_data = cleaned_data[3:]
+                if cleaned_data.endswith('```'):
+                    cleaned_data = cleaned_data[:-3]
+                cleaned_data = cleaned_data.strip()
+            
+            logger.debug(f"Cleaned JSON (first 100 chars): {cleaned_data[:100]}")
+            data = json.loads(cleaned_data)
+            
+            # Проверяем обязательные поля
+            if not isinstance(data, dict):
+                raise ValueError("Response is not a JSON object")
+            
+            required_fields = ['status', 'summary', 'next_steps']
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                raise ValueError(f"Missing required fields: {missing_fields}")
+            
             return cls(**data)
-        except Exception as e:
-            # Fallback для некорректного JSON
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            logger.error(f"Raw response: {repr(json_data[:500])}")
             return cls(
                 status='error',
                 next_steps=[],
                 summary=f"Ошибка парсинга JSON: {str(e)}",
+                analysis=f"Некорректный JSON ответ от ИИ: {json_data[:200]}..."
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error parsing AI response: {e}")
+            return cls(
+                status='error',
+                next_steps=[],
+                summary=f"Неожиданная ошибка: {str(e)}",
                 analysis=json_data[:500] if isinstance(json_data, str) else str(json_data)
             )
 
 class DocsAgent:
     """
-    Умный оркестратор генерации документации
-    
-    Координирует работу всех компонентов:
-    - DocsSessionManager - управление состоянием
-    - ActionExecutor - выполнение действий
-    - AI взаимодействие - JSON контракт
+    Главный оркестратор генерации документации с ИИ
+    Координирует DocsSessionManager, ActionExecutor и ИИ вызовы
     """
     
     def __init__(self):
         self.session_manager = DocsSessionManager()
         self.action_executor = ActionExecutor()
-        self.logger = logging.getLogger(self.__class__.__name__)
-    
+        self.logger = logger
+        
+        # Загружаем переменные окружения для ИИ
+        try:
+            from .ai_utils import load_env_file
+            env_loaded = load_env_file()
+            if env_loaded:
+                logger.debug("🔧 DocsAgent: .env файл загружен")
+        except Exception as e:
+            logger.warning(f"⚠️ DocsAgent: Ошибка загрузки .env: {e}")
+        
+        # Инициализируем ИИ модуль для реальных вызовов
+        self._ai_module_available = False
+        self._generate_ai_review_func = None
+        try:
+            from .ai_utils import generate_ai_review
+            self._generate_ai_review_func = generate_ai_review
+            self._ai_module_available = True
+            logger.info("✅ DocsAgent: ИИ модуль инициализирован")
+        except ImportError as e:
+            logger.warning(f"⚠️ DocsAgent: ИИ модуль недоступен - {e}")
+            self._generate_ai_review_func = None
+            
+        # Инициализируем context_generator для анализа проекта  
+        self.context_generator = None
+        try:
+            from .context_generator import ContextGenerator
+            self.context_generator = ContextGenerator()
+            logger.info("✅ DocsAgent: Генератор контекста инициализирован")
+        except Exception as e:
+            logger.error(f"❌ DocsAgent: Ошибка инициализации генератора контекста: {e}")
+
     async def generate_docs(
         self,
         path: str = ".",
@@ -200,18 +277,251 @@ class DocsAgent:
         """
         Получает начальный анализ проекта от ИИ
         
-        В реальной реализации здесь будет вызов к ИИ с JSON промптом.
-        Сейчас возвращаем демо-данные для тестирования архитектуры.
+        РЕАЛЬНАЯ ИНТЕГРАЦИЯ: Использует context_generator + ai_utils
         """
         
-        self.logger.info("Запрос начального анализа от ИИ")
+        self.logger.info("🧠 Запрос начального анализа от ИИ")
         
-        # TODO: Заменить на реальный вызов ИИ
-        # prompt = self._create_analysis_prompt(project_path, params)
-        # ai_response_text = await call_ai_model(ai_model, prompt)
-        # return AIResponse.from_json(ai_response_text)
+        if not self._ai_module_available:
+            # Fallback демо-режим если ИИ недоступен
+            return await self._get_demo_initial_analysis(project_path)
         
-        # Демо-ответ для тестирования
+        try:
+            # 1. Анализируем проект с помощью context_generator
+            project_context = await self._generate_project_context(project_path, params)
+            
+            # 2. Создаем промпт для ИИ анализа
+            ai_prompt = self._create_analysis_prompt(project_path, project_context, params)
+            
+            # 3. Получаем ответ от ИИ
+            self.logger.info(f"🤖 Отправляем запрос к {ai_model}")
+            self.logger.debug(f"Промпт для ИИ (первые 300 символов): {ai_prompt[:300]}...")
+            
+            ai_response_text = self._generate_ai_review_func(ai_prompt, ai_model)
+            
+            # Логируем ответ для диагностики
+            self.logger.info(f"📥 Получен ответ от ИИ длиной: {len(ai_response_text) if ai_response_text else 0} символов")
+            if ai_response_text:
+                self.logger.debug(f"Ответ ИИ (первые 200 символов): {ai_response_text[:200]}")
+            else:
+                self.logger.error("❌ ИИ вернул пустой ответ!")
+            
+            # 4. Парсим JSON ответ
+            ai_response = AIResponse.from_json(ai_response_text)
+            
+            self.logger.info(f"✅ Получен ответ от ИИ: {ai_response.status}")
+            return ai_response
+            
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка анализа ИИ: {e}")
+            # Возвращаем fallback ответ
+            return AIResponse(
+                status='error',
+                next_steps=[],
+                summary=f"Ошибка ИИ анализа: {str(e)}",
+                analysis="Переключаемся на демо режим из-за ошибки ИИ"
+            )
+    
+    async def _get_next_instructions(
+        self, 
+        project_path: Path, 
+        session_state: SessionState, 
+        ai_model: str
+    ) -> AIResponse:
+        """
+        Получает следующие инструкции от ИИ на основе текущего прогресса
+        
+        РЕАЛЬНАЯ ИНТЕГРАЦИЯ: Анализирует прогресс и запрашивает следующие шаги
+        """
+        
+        self.logger.info("🔄 Запрос следующих инструкций от ИИ")
+        
+        if not self._ai_module_available:
+            # Fallback демо-режим
+            return await self._get_demo_next_instructions(session_state)
+        
+        try:
+            # 1. Создаем промпт для проверки прогресса
+            progress_prompt = self._create_progress_prompt(project_path, session_state)
+            
+            # 2. Получаем ответ от ИИ
+            self.logger.info(f"🤖 Проверяем прогресс с {ai_model}")
+            self.logger.debug(f"Промпт прогресса (первые 200 символов): {progress_prompt[:200]}...")
+            
+            ai_response_text = self._generate_ai_review_func(progress_prompt, ai_model)
+            
+            # Логируем ответ для диагностики
+            self.logger.info(f"📥 Получен ответ прогресса длиной: {len(ai_response_text) if ai_response_text else 0} символов")
+            if ai_response_text:
+                self.logger.debug(f"Ответ ИИ прогресса (первые 200 символов): {ai_response_text[:200]}")
+            else:
+                self.logger.error("❌ ИИ вернул пустой ответ для прогресса!")
+            
+            # 3. Парсим JSON ответ
+            ai_response = AIResponse.from_json(ai_response_text)
+            
+            self.logger.info(f"✅ Получен прогресс от ИИ: {ai_response.status}")
+            return ai_response
+            
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка запроса прогресса: {e}")
+            return AIResponse(
+                status='error',
+                next_steps=[],
+                summary=f"Ошибка проверки прогресса: {str(e)}"
+            )
+    
+    async def _generate_project_context(self, project_path: Path, params: Dict) -> str:
+        """
+        Генерирует контекст проекта для анализа ИИ
+        
+        Использует context_generator для сбора информации о проекте
+        """
+        
+        if not self.context_generator:
+            return f"Проект в {project_path} (детальный анализ недоступен)"
+        
+        try:
+            # Используем documentation шаблон для анализа структуры проекта
+            context_args = {
+                "path": str(project_path),
+                "template_name": "documentation",
+                "include_patterns": ["*.py", "*.md", "*.txt", "*.yml", "*.yaml", "*.toml", "*.cfg"],
+                "exclude_patterns": [
+                    "__pycache__/**", "*.pyc", ".git/**", 
+                    "node_modules/**", ".venv/**", "venv/**",
+                    "*.log", "*.tmp", ".docs_session/**"
+                ],
+                "line_numbers": False,  # Для анализа структуры номера строк не нужны
+                "code_blocks": True,
+                "follow_symlinks": False
+            }
+            
+            context_results = await self.context_generator.get_context(context_args)
+            context_text = context_results[0].text if context_results else ""
+            
+            # Ограничиваем размер контекста для ИИ (макс 50k символов)
+            if len(context_text) > 50000:
+                context_text = context_text[:50000] + "\n\n... (контекст обрезан для анализа)"
+            
+            return context_text
+            
+        except Exception as e:
+            self.logger.error(f"Ошибка генерации контекста: {e}")
+            return f"Проект в {project_path} (ошибка анализа: {str(e)})"
+
+    def _create_analysis_prompt(self, project_path: Path, project_context: str, params: Dict) -> str:
+        """
+        Создает промпт для начального анализа проекта
+        
+        РЕАЛЬНАЯ РЕАЛИЗАЦИЯ: Анализирует структуру проекта и создает план документации
+        """
+        
+        docs_structure = params.get('docs_structure', 'standard')
+        target_guide_length = params.get('target_guide_length', 150)
+        
+        return f"""Ты - эксперт по созданию технической документации. Проанализируй проект и создай план генерации документации.
+
+# ПРОЕКТ ДЛЯ АНАЛИЗА:
+{project_context}
+
+# ПАРАМЕТРЫ ГЕНЕРАЦИИ:
+- Структура документации: {docs_structure}
+- Целевая длина руководств: {target_guide_length} строк
+- Путь проекта: {project_path}
+
+# ЗАДАЧА:
+1. Проанализируй структуру проекта, его назначение и технологии
+2. Определи какая документация нужна (README, API docs, guides и т.д.)
+3. Создай план первых 2-3 файлов документации
+4. Включи практические примеры использования
+
+# ВЕРНИ ОТВЕТ СТРОГО В JSON ФОРМАТЕ:
+{{
+    "status": "in_progress",
+    "summary": "Краткое описание плана документации",
+    "analysis": "Детальный анализ проекта и его потребностей в документации",
+    "next_steps": [
+        {{
+            "action": "create_directory",
+            "path": "docs"
+        }},
+        {{
+            "action": "create_file", 
+            "path": "docs/README.md",
+            "content": "# Название проекта\\n\\n## Обзор\\nОписание проекта...\\n\\n## Установка\\n```bash\\n# команды установки\\n```"
+        }}
+    ]
+}}
+
+# ТРЕБОВАНИЯ:
+- Используй markdown разметку
+- Создавай практичную документацию с примерами
+- НЕ создавай более 3 файлов за раз
+- Включай секции: обзор, установка, использование, примеры
+- Адаптируй под конкретный проект
+
+ПОДДЕРЖИВАЕМЫЕ ДЕЙСТВИЯ: create_file, create_directory, update_file
+
+Начни анализ и верни план в JSON формате."""
+
+    def _create_progress_prompt(self, project_path: Path, session_state: SessionState) -> str:
+        """
+        Создает промпт для проверки прогресса
+        
+        РЕАЛЬНАЯ РЕАЛИЗАЦИЯ: Анализирует текущее состояние документации
+        """
+        
+        completed_steps = session_state.completed_steps
+        
+        # Проверяем что существует в папке docs
+        docs_path = project_path / "docs"
+        existing_files = []
+        if docs_path.exists():
+            for file_path in docs_path.rglob("*"):
+                if file_path.is_file():
+                    relative_path = file_path.relative_to(project_path)
+                    existing_files.append(str(relative_path))
+        
+        return f"""Проверь прогресс генерации документации для проекта.
+
+# ПРОЕКТ: {project_path}
+# ВЫПОЛНЕНО ШАГОВ: {len(completed_steps)}
+
+# ВЫПОЛНЕННЫЕ ШАГИ:
+{json.dumps(completed_steps, indent=2, ensure_ascii=False)}
+
+# СУЩЕСТВУЮЩИЕ ФАЙЛЫ ДОКУМЕНТАЦИИ:
+{json.dumps(existing_files, indent=2, ensure_ascii=False)}
+
+# ЗАДАЧА:
+1. Проанализируй что уже создано
+2. Определи полноту документации
+3. Если документация достаточна - верни status: "completed"  
+4. Если нужны дополнения - дай следующие 2-3 действия
+
+# КРИТЕРИИ ЗАВЕРШЕНИЯ:
+- Есть основной README.md с описанием проекта
+- Есть инструкции по установке и использованию
+- Есть примеры кода (если это библиотека/фреймворк)
+- Документация логично структурирована
+
+# ВЕРНИ ОТВЕТ В JSON ФОРМАТЕ:
+{{
+    "status": "in_progress" или "completed",
+    "summary": "Описание текущего состояния и следующих шагов",
+    "next_steps": [
+        // список следующих действий или пустой массив если завершено
+    ]
+}}
+
+Оцени прогресс и верни план в JSON формате."""
+
+    async def _get_demo_initial_analysis(self, project_path: Path) -> AIResponse:
+        """Демо-версия начального анализа для случая недоступности ИИ"""
+        
+        self.logger.info("⚠️ Используется демо режим начального анализа")
+        
         demo_response = {
             "status": "in_progress",
             "summary": "Проанализирован проект. Создаю базовую структуру документации.",
@@ -231,24 +541,11 @@ class DocsAgent:
         
         return AIResponse(**demo_response)
     
-    async def _get_next_instructions(
-        self, 
-        project_path: Path, 
-        session_state: SessionState, 
-        ai_model: str
-    ) -> AIResponse:
-        """
-        Получает следующие инструкции от ИИ на основе текущего прогресса
-        """
+    async def _get_demo_next_instructions(self, session_state: SessionState) -> AIResponse:
+        """Демо-версия следующих инструкций"""
         
-        self.logger.info("Запрос следующих инструкций от ИИ")
+        self.logger.info("⚠️ Используется демо режим следующих инструкций")
         
-        # TODO: Заменить на реальный вызов ИИ
-        # prompt = self._create_progress_prompt(project_path, session_state)
-        # ai_response_text = await call_ai_model(ai_model, prompt)
-        # return AIResponse.from_json(ai_response_text)
-        
-        # Демо-логика для тестирования
         completed_steps = len(session_state.completed_steps)
         
         if completed_steps < 2:
@@ -259,8 +556,8 @@ class DocsAgent:
                 "next_steps": [
                     {
                         "action": "create_file",
-                        "path": "docs/CHANGELOG.md",
-                        "content": "# Changelog\n\n## [Unreleased]\n\n### Added\n- Пошаговая генерация документации\n- Интеграция с Neira для анализа кода\n\n### Fixed\n- Исправлены проблемы с таймаутами"
+                        "path": "docs/QUICKSTART.md",
+                        "content": "# Быстрый старт\n\n## Установка\n```bash\nuv sync\n```\n\n## Запуск\n```bash\nuv run python -m src.neira_code_analyzer.main\n```"
                     }
                 ]
             }
@@ -273,82 +570,7 @@ class DocsAgent:
             }
         
         return AIResponse(**demo_response)
-    
-    def _create_analysis_prompt(self, project_path: Path, params: Dict) -> str:
-        """
-        Создает промпт для начального анализа проекта
-        
-        Возвращает JSON-структурированный промпт для ИИ.
-        """
-        
-        return f"""
-Проанализируй проект в папке {project_path} и создай план генерации документации.
 
-ВЕРНИ ОТВЕТ СТРОГО В JSON ФОРМАТЕ:
-{{
-    "status": "in_progress",
-    "summary": "Краткое описание что будет сделано",
-    "analysis": "Детальный анализ проекта",
-    "next_steps": [
-        {{
-            "action": "create_file",
-            "path": "путь/к/файлу.md",
-            "content": "содержимое файла"
-        }},
-        {{
-            "action": "create_directory",
-            "path": "путь/к/папке"
-        }}
-    ]
-}}
-
-ПОДДЕРЖИВАЕМЫЕ ДЕЙСТВИЯ:
-- create_file: создать файл с содержимым
-- create_directory: создать папку
-- update_file: обновить существующий файл
-
-ПРАВИЛА:
-1. Анализируй структуру проекта
-2. Создавай логичную структуру документации
-3. Включай практические примеры
-4. Используй markdown форматирование
-5. НЕ создавай более 3-4 файлов за раз
-
-Начни анализ проекта и верни первые шаги в JSON формате.
-"""
-    
-    def _create_progress_prompt(self, project_path: Path, session_state: SessionState) -> str:
-        """
-        Создает промпт для проверки прогресса
-        """
-        
-        completed_steps = session_state.completed_steps
-        
-        return f"""
-ПРОВЕРКА ПРОГРЕССА ГЕНЕРАЦИИ ДОКУМЕНТАЦИИ
-
-ПРОЕКТ: {project_path}
-ВЫПОЛНЕНО ШАГОВ: {len(completed_steps)}
-
-ВЫПОЛНЕННЫЕ ШАГИ:
-{json.dumps(completed_steps, indent=2, ensure_ascii=False)}
-
-ЗАДАЧА:
-1. Проверь что уже создано в папке docs/
-2. Определи что осталось сделать для завершения документации
-3. Если документация готова - верни status: "completed"
-4. Если нужны еще шаги - дай следующие 2-3 действия
-
-ВЕРНИ ОТВЕТ В JSON ФОРМАТЕ:
-{{
-    "status": "in_progress" или "completed",
-    "summary": "Что сделано и что дальше",
-    "next_steps": [
-        // список действий или пустой массив если завершено
-    ]
-}}
-"""
-    
     def _generate_start_report(
         self, 
         project_path: Path, 
