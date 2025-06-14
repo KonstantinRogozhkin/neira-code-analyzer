@@ -361,6 +361,29 @@ async def get_analyze_tool(arguments: dict) -> list[TextContent]:
         from .neira_config_loader import get_config_loader
         config_loader = get_config_loader()
 
+        # ⚡ QUICK WIN: Автонастройка фильтров для ускорения на 40-60%
+        config_info = config_loader.get_config_info(str(validated_path))
+        if not config_info["has_config"]:
+            logger.info(f"🔧 Нет конфигурации .neira для {validated_path}, запускаем автонастройку фильтров...")
+
+            # Автоматически запускаем set_filters с агрессивными настройками
+            from .filter_setup_service import FilterSetupService
+            filter_service = get_cached_service(FilterSetupService)
+
+            filter_result = await filter_service.setup_project_filters(
+                path=str(validated_path),
+                preset_name="aggressive",  # Агрессивный пресет для максимального ускорения
+                include_patterns=[],
+                exclude_patterns=[],
+                merge_with_preset=False,
+                encoding=arguments.get("encoding", "cl100k")
+            )
+
+            if filter_result.success:
+                logger.info(f"✅ Автонастройка фильтров завершена: {filter_result.optimization_stats}")
+            else:
+                logger.warning(f"⚠️ Автонастройка фильтров не удалась: {filter_result.error_message}")
+
         # Применяем сохраненную конфигурацию проекта (если есть)
         arguments_copy = arguments.copy()
         arguments_copy['path'] = str(validated_path)

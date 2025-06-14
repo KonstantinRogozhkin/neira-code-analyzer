@@ -619,108 +619,11 @@ class ContextGenerator:
     # УДАЛЕН: God Method analyze_filters (196 строк) - логика перенесена в FilterAnalyzer и AnalysisReporter
     # Используйте FilterAnalyzer.analyze() и AnalysisReporter.generate_report() вместо этого метода
 
-    async def analyze_filters_tool(self, arguments: dict) -> list[TextContent]:
-        """
-        MCP обертка для анализа фильтров - переписано для использования новой архитектуры
-
-        АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Использует FilterAnalyzer + AnalysisReporter вместо God Method
-
-        ⚠️ УСТАРЕВШИЙ ИНСТРУМЕНТ: Рекомендуется использовать `set_filters` для настройки фильтров.
-        `analyze_filters` предназначен только для отладки и анализа существующих конфигураций.
-
-        Для полного AI анализа используйте `get_analyze`.
-        """
-        try:
-            # ИСПРАВЛЕНО: Используем новые специализированные сервисы вместо God Method
-            from .analysis_reporter import AnalysisReporter
-            from .filter_analyzer import FilterAnalyzer
-
-            # Создаем экземпляры сервисов
-            analyzer = FilterAnalyzer()
-            reporter = AnalysisReporter()
-
-            # Извлекаем параметры
-            path = arguments.get("path", ".")
-            include_patterns = arguments.get("include_patterns", [])
-            exclude_patterns = arguments.get("exclude_patterns", [])
-            encoding = arguments.get("encoding", "cl100k")
-
-            # Обрабатываем пресеты если указаны
-            preset_name = arguments.get("preset_name")
-            merge_with_preset = arguments.get("merge_with_preset", False)
-
-            if preset_name:
-                from .filters import load_preset
-                preset_patterns = load_preset(preset_name)
-                if preset_patterns:
-                    preset_include, preset_exclude = preset_patterns
-
-                    if merge_with_preset:
-                        include_patterns = list(set(preset_include + include_patterns))
-                        exclude_patterns = list(set(preset_exclude + exclude_patterns))
-                        logger.info(f"Merged preset '{preset_name}' with custom patterns")
-                    else:
-                        include_patterns = preset_include
-                        exclude_patterns = preset_exclude
-                        logger.info(f"Using preset '{preset_name}' patterns")
-                else:
-                    logger.warning(f"Preset '{preset_name}' not found, using original patterns")
-
-            # Выполняем анализ через новый сервис
-            analysis_result = await analyzer.analyze(
-                path=path,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-                encoding=encoding
-            )
-
-            if not analysis_result.success:
-                return [TextContent(type="text", text=f"❌ {analysis_result.error_message}")]
-
-            # Генерируем отчет через новый сервис
-            report = reporter.generate_report(analysis_result)
-
-            # Обрабатываем сохранение пресета если указано
-            save_as_preset = arguments.get("save_as_preset")
-            if save_as_preset:
-                from pathlib import Path  # Импорт для работы с путями
-
-                from .filters import save_preset
-                description = f"Пресет, созданный из анализа проекта {Path(path).name} ({analysis_result.total_tokens:,} токенов)"
-                success = save_preset(
-                    save_as_preset,
-                    include_patterns,
-                    exclude_patterns,
-                    description,
-                    project_path=path,
-                    token_count=analysis_result.total_tokens,
-                    created_from_analysis=True
-                )
-
-                if success:
-                    report += "\n\n## ✅ Пресет сохранен\n\n"
-                    report += f"**Название:** `{save_as_preset}`\n"
-                    report += f"**Описание:** {description}\n"
-                    logger.info(f"Пресет '{save_as_preset}' успешно сохранен")
-                else:
-                    report += "\n\n## ❌ Ошибка сохранения пресета\n\n"
-                    report += f"Не удалось сохранить пресет `{save_as_preset}`\n"
-                    logger.error(f"Не удалось сохранить пресет '{save_as_preset}'")
-
-            # Добавляем предупреждение в начало отчёта
-            deprecated_warning = "## ⚠️ Устаревший инструмент\n\n"
-            deprecated_warning += "**Этот инструмент устарел.** Рекомендуется использовать:\n"
-            deprecated_warning += "- **`set_filters`** - для настройки и оптимизации фильтров\n"
-            deprecated_warning += "- **`get_analyze`** - для полного автоматического AI анализа кода\n\n"
-            deprecated_warning += "---\n\n"
-
-            enhanced_report = deprecated_warning + report
-            return [TextContent(type="text", text=enhanced_report)]
-
-        except Exception as e:
-            error_msg = f"❌ Ошибка анализа фильтров: {str(e)}"
-            logger.error(error_msg)
-            return [TextContent(type="text", text=error_msg)]
+    # АРХИТЕКТУРНОЕ УЛУЧШЕНИЕ: Удален устаревший analyze_filters_tool
+    # Весь функционал доступен через:
+    # - set_filters - для настройки и оптимизации фильтров
+    # - get_analyze - для полного автоматического AI анализа кода
+    # - project_config - для просмотра текущих настроек
 
     async def get_context(self, arguments: dict) -> list[TextContent]:
         """
