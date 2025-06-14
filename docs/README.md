@@ -16,9 +16,9 @@
 
 ### Инструменты анализа
 - **[get_analyze](../README.md#get_analyze)** ⭐ - Флагманский AI анализ с автооптимизацией
-- **[analyze_filters](../README.md#analyze_filters)** - Оптимизация фильтров файлов
+- **[set_filters](../README.md#set_filters)** - Автоматическая настройка фильтров файлов
 - **[get_context](../README.md#get_context)** - Генерация контекста для ИИ
-- **[interactive_analysis](guides/features/interactive_analysis.md)** - Интерактивный многошаговый анализ
+- **[get_analyze с session_id](guides/features/interactive_analysis.md)** - Интерактивный многошаговый анализ
 
 ### Система шаблонов
 - **[7 профессиональных шаблонов](guides/features/templates.md)** - От code-review до security-audit

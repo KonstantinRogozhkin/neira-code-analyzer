@@ -78,7 +78,7 @@ docker run -e GOOGLE_API_KEY="your-key" neira-code-analyzer
 - `set_filters` - настройка фильтров
 - `gen_docs` - генерация документации
 - `get_templates` - просмотр шаблонов
-- `analyze_filters` - анализ фильтров
+- `set_filters` - автоматическая настройка фильтров
 
 ## 🔍 Отладка проблем
 
