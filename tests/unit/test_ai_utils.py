@@ -28,11 +28,11 @@ class TestAsyncAIFunctions:
         expected_response = "Test AI analysis response"
 
         with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_api_key"), \
-             patch('src.neira_code_analyzer.ai_utils.genai.Client') as mock_client_class:
+             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
-            # Мокируем клиент и его методы
+            # Мокируем клиент через singleton
             mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
+            mock_get_client.return_value = mock_client
 
             # Мокируем ответ от API
             mock_response = MagicMock()
@@ -54,9 +54,12 @@ class TestAsyncAIFunctions:
         # Arrange
         test_prompt = "Test prompt"
 
-        with patch('src.neira_code_analyzer.ai_utils.check_api_key', side_effect=ValueError("API ключ не найден")):
+        # Убираем все API ключи из окружения и мокируем check_api_key чтобы вызвать ошибку
+        with patch.dict(os.environ, {}, clear=True), \
+             patch('src.neira_code_analyzer.ai_utils.check_api_key', side_effect=ValueError("API ключ не найден")):
             # Act & Assert
-            with pytest.raises(ValueError, match="API ключ не найден"):
+            # Ошибка оборачивается в Exception с префиксом "Ошибка при вызове Google AI API"
+            with pytest.raises(Exception, match="Ошибка при вызове Google AI API: API ключ не найден"):
                 await generate_ai_review_async(test_prompt)
 
     @pytest.mark.asyncio
@@ -66,10 +69,10 @@ class TestAsyncAIFunctions:
         test_prompt = "Test prompt"
 
         with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
-             patch('src.neira_code_analyzer.ai_utils.genai.Client') as mock_client_class:
+             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
             mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
+            mock_get_client.return_value = mock_client
             mock_client.models.generate_content.side_effect = Exception("API Error")
 
             # Act & Assert
@@ -83,10 +86,10 @@ class TestAsyncAIFunctions:
         test_prompt = "Test prompt"
 
         with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
-             patch('src.neira_code_analyzer.ai_utils.genai.Client') as mock_client_class:
+             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
             mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
+            mock_get_client.return_value = mock_client
 
             # Мокируем пустой ответ
             mock_response = MagicMock()
@@ -227,10 +230,10 @@ class TestAsyncArchitecture:
         start_time = asyncio.get_event_loop().time()
 
         with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
-             patch('src.neira_code_analyzer.ai_utils.genai.Client') as mock_client_class:
+             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
             mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
+            mock_get_client.return_value = mock_client
 
             # Симулируем медленный API вызов
             def slow_api_call(*args, **kwargs):

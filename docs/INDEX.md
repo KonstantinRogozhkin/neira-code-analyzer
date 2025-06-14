@@ -1,38 +1,33 @@
-# Оглавление
+# Оглавление Документации
 
-Добро пожаловать в документацию по проекту Neira Code Analyzer. Здесь вы найдете всю необходимую информацию для работы с проектом, его изучения и внесения своего вклада.
+Добро пожаловать в документацию по проекту **Neira Code Analyzer**. Этот файл служит центральным оглавлением для навигации по всем разделам.
 
-### Основное
-- [**README**](README.md) - Общая информация о проекте.
-- [**Быстрый старт (Quickstart)**](help/quickstart.md) - Как быстро начать работу.
-- [**Часто задаваемые вопросы (FAQ)**](FAQ.md) - Ответы на популярные вопросы.
+## 🚀 Начало работы
 
-### Руководства (Guides)
+- [**Краткое руководство (Quickstart)**](./help/quickstart.md) - Начните использовать проект за 5 минут.
+- [**Установка (Installation)**](./guides/setup/installation.md) - Подробные инструкции по установке.
+- [**FAQ (Часто задаваемые вопросы)**](./FAQ.md) - Ответы на популярные вопросы.
 
-**1. Установка и настройка**
-- [Инструкция по установке](guides/setup/installation.md)
+## 📖 Руководства (Guides)
 
-**2. Архитектура**
-- [Обзор архитектуры](guides/architecture/overview.md)
+### Архитектура
+- [**Обзор архитектуры (Architecture Overview)**](./guides/architecture/overview.md) - Как устроен проект.
+- [**Тестирование (Testing)**](./guides/architecture/testing.md) - Подход к тестированию в проекте.
 
-**3. Возможности (Features)**
-- [Интерактивный анализ](guides/features/interactive_analysis.md)
-- [Работа с шаблонами](guides/features/templates.md)
-- [Настройка фильтров](guides/features/set_filters.md)
-- [Фильтрация](guides/features/filtering.md)
-- [Генерация документации](guides/features/gen_docs.md)
+### Основные возможности (Features)
+- [**Конфигурация (Configuration)**](./guides/features/configuration.md) - Настройка анализатора.
+- [**Фильтрация (Filtering)**](./guides/features/filtering.md) - Как использовать фильтры.
+- [**Интерактивный анализ (Interactive Analysis)**](./guides/features/interactive_analysis.md) - Использование в интерактивном режиме.
+- [**Шаблоны (Templates)**](./guides/features/templates.md) - Работа с шаблонами.
 
-**4. Примеры**
-- [Примеры использования (Use Cases)](guides/examples/use_cases.md)
+### Примеры использования
+- [**Сценарии использования (Use Cases)**](./guides/examples/use_cases.md) - Практические примеры.
 
-**5. Эксплуатация и тестирование**
-- [Тестирование](guides/ops/testing.md)
-- [Обслуживание](guides/ops/maintenance.md)
+## 📚 Справочник API
 
-### Для разработчиков
-- [**Справочник по API**](API.md) - Описание API.
-- [**Руководство по контрибьюции**](CONTRIBUTING.md) - Как внести свой вклад в проект.
-- [**Информация о безопасности**](fixes/SECURITY_AND_ARCHITECTURE_FIXES.md) - Исправления и улучшения безопасности.
+- [**Описание API (API Reference)**](./API.md) - Детальное описание публичного API.
 
-### История изменений
-- [**Changelog**](changelog/CHANGELOG.md) - Список изменений по версиям.
+## 👥 Для контрибьюторов
+
+- [**Руководство по контрибьюции (Contributing Guide)**](./CONTRIBUTING.md) - Как внести свой вклад в проект.
+- [**Журнал изменений (Changelog)**](./changelog/CHANGELOG.md) - История версий и изменений.
