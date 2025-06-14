@@ -15,11 +15,11 @@ MODULES_TO_TEST = [
 def test_import(module_path: str, description: str) -> bool:
     """
     Проверяет возможность импорта модуля
-    
+
     Args:
         module_path: Путь к модулю для импорта
         description: Описание модуля для вывода
-        
+
     Returns:
         bool: True если импорт успешен, False если ошибка
     """
@@ -34,15 +34,15 @@ def test_import(module_path: str, description: str) -> bool:
 def main():
     """Основная функция для проверки всех модулей"""
     print("🔍 Проверка импортов модулей neira-code-analyzer...\n")
-    
+
     # Используем sum() для более лаконичного подсчета успешных импортов
     results = [test_import(path, desc) for path, desc in MODULES_TO_TEST]
     successful_imports = sum(results)
     total_imports = len(MODULES_TO_TEST)
-    
+
     # Выводим итоговую статистику
     print(f"\n📊 Результат: {successful_imports}/{total_imports} модулей импортированы успешно")
-    
+
     if successful_imports == total_imports:
         print("🎉 Все модули работают корректно!")
     else:
@@ -50,4 +50,4 @@ def main():
         print(f"⚠️ Найдено {failed_imports} проблем с импортами")
 
 if __name__ == "__main__":
-    main() 
+    main()

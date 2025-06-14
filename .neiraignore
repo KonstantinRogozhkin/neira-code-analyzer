@@ -1,0 +1,54 @@
+# Бинарные файлы и скомпилированные библиотеки
+*.so
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.egg-info/
+build/
+dist/
+
+# Виртуальная среда (добавлено для исключения больших файлов)
+.venv/
+venv/
+env/
+.env/
+
+# Большие бинарные файлы (критическое исключение)
+**/*.abi3.so
+code2prompt_rs.abi3.so
+*.cpython-*.so
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# IDE файлы
+.vscode/
+.idea/
+.cursor/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage файлы
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Другие артефакты
+.neira.bak
+.docs_session/
+node_modules/
+*.lock
+uv.lock
+
+# Архивы
+*.zip
+*.tar.gz
+*.rar 

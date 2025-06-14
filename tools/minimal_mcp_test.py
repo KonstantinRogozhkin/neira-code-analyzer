@@ -3,6 +3,7 @@
 Минимальный MCP сервер для диагностики проблем
 """
 import asyncio
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool
@@ -35,4 +36,4 @@ async def main():
         await app.run(read_stream, write_stream, app.create_initialization_options())
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
