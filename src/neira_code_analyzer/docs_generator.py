@@ -3,7 +3,7 @@
 
 Заменил "God Object" на композицию специализированных классов:
 - DocsAgent: умный оркестратор с JSON контрактом
-- DocsSessionManager: управление состоянием сессии  
+- DocsSessionManager: управление состоянием сессии
 - ActionExecutor: выполнение структурированных действий
 
 Устранены проблемы:
@@ -13,8 +13,6 @@
 """
 
 import logging
-from pathlib import Path
-from typing import Dict
 
 from .docs_agent import DocsAgent
 
@@ -23,23 +21,23 @@ logger = logging.getLogger(__name__)
 class DocsGenerator:
     """
     Рефакторированный генератор документации
-    
-    Теперь это тонкая обертка над DocsAgent, которая сохраняет 
+
+    Теперь это тонкая обертка над DocsAgent, которая сохраняет
     обратную совместимость API но использует новую архитектуру.
-    
+
     Преимущества новой архитектуры:
     - Четкое разделение ответственностей (SRP)
     - JSON контракт с ИИ вместо хрупкого парсинга
     - Типизированные структуры данных
     - Простота тестирования и расширения
     """
-    
+
     def __init__(self):
         """Инициализация с использованием нового DocsAgent"""
         self.docs_agent = DocsAgent()
         self.logger = logging.getLogger(self.__class__.__name__)
-        
-    async def generate_docs(self, 
+
+    async def generate_docs(self,
                           path: str = ".",
                           docs_structure: str = "standard",
                           scan_depth: int = 3,
@@ -53,7 +51,7 @@ class DocsGenerator:
                           **kwargs) -> str:
         """
         Генерация документации с использованием новой архитектуры
-        
+
         Args:
             path: Путь к проекту для анализа
             docs_structure: Структура документации (пока не используется)
@@ -62,24 +60,24 @@ class DocsGenerator:
             archive_processed: Архивировать обработанные файлы (пока не используется)
             update_changelog: Обновлять changelog (пока не используется)
             git_scan_days: Дни для сканирования git (пока не используется)
-            compress_guides: Сжимать руководства (пока не используется) 
+            compress_guides: Сжимать руководства (пока не используется)
             target_guide_length: Целевая длина руководства (пока не используется)
             ai_model: Модель ИИ для использования
             **kwargs: Дополнительные параметры
-            
+
         Returns:
             str: Отчет о генерации документации
-            
+
         Note:
             Многие параметры пока не используются в новой архитектуре.
             Они сохранены для обратной совместимости и будут реализованы
             в будущих версиях по мере необходимости.
         """
-        
-        self.logger.info(f"🚀 Запуск рефакторированной генерации документации")
+
+        self.logger.info("🚀 Запуск рефакторированной генерации документации")
         self.logger.info(f"📁 Проект: {path}")
         self.logger.info(f"🤖 ИИ модель: {ai_model}")
-        
+
         # Собираем все параметры для передачи в DocsAgent
         params = {
             'docs_structure': docs_structure,
@@ -92,7 +90,7 @@ class DocsGenerator:
             'target_guide_length': target_guide_length,
             **kwargs
         }
-        
+
         try:
             # Делегируем всю работу DocsAgent
             result = await self.docs_agent.generate_docs(
@@ -100,14 +98,14 @@ class DocsGenerator:
                 ai_model=ai_model,
                 **params
             )
-            
+
             self.logger.info("✅ Генерация документации завершена успешно")
             return result
-            
+
         except Exception as e:
             error_msg = f"Ошибка генерации документации: {str(e)}"
             self.logger.error(error_msg)
-            
+
             # Возвращаем понятный отчет об ошибке
             return f"""❌ ОШИБКА ГЕНЕРАЦИИ ДОКУМЕНТАЦИИ
 
@@ -126,4 +124,4 @@ class DocsGenerator:
 """
 
 # Для обратной совместимости экспортируем главный класс
-__all__ = ['DocsGenerator'] 
+__all__ = ['DocsGenerator']
