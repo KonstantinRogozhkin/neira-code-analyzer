@@ -6,7 +6,6 @@ NeiraAnalyzer - Унифицированный анализатор кода с 
 """
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
 # Импорты новой архитектуры
@@ -17,26 +16,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "gemini-2.5-pro-preview-06-05"
 DEFAULT_TEMPLATE_NAME = "code-review"
 
-@dataclass
-class AnalysisJob:
-    """Класс для хранения параметров анализа кода (УНИФИЦИРОВАННЫЙ)"""
-    path: str
-    template_name: str = DEFAULT_TEMPLATE_NAME
-    include_patterns: list = None
-    exclude_patterns: list = None
-    max_tokens: int = 1000000
-    ai_model: str = DEFAULT_MODEL
-    preset_name: str = None
-    merge_with_preset: bool = False
-    save_as_preset: str = None
-    user_query: str = None  # Пользовательский запрос/комментарий для фокуса анализа
-
-    def __post_init__(self):
-        """Инициализация значений по умолчанию"""
-        if self.include_patterns is None:
-            self.include_patterns = []
-        if self.exclude_patterns is None:
-            self.exclude_patterns = []
+# ИСПРАВЛЕНИЕ: Удален неиспользуемый dataclass AnalysisJob
+# Логика параметров анализа теперь полностью инкапсулирована в AnalysisAgent
 
 class NeiraAnalyzer:
     """
@@ -70,6 +51,7 @@ class NeiraAnalyzer:
         exclude_patterns: list[str] = None,
         max_tokens: int = 1000000,
         ai_model: str = DEFAULT_MODEL,
+        encoding: str = "cl100k",
         preset_name: str = None,
         merge_with_preset: bool = False,
         save_as_preset: str = None,
@@ -89,6 +71,7 @@ class NeiraAnalyzer:
             exclude_patterns: Паттерны исключения файлов
             max_tokens: Максимальное количество токенов
             ai_model: Модель ИИ
+            encoding: Кодировка текста
             preset_name: Имя пресета фильтров
             merge_with_preset: Объединить с пресетом
             save_as_preset: Сохранить как пресет
@@ -125,6 +108,7 @@ class NeiraAnalyzer:
                 include_patterns=include_patterns or [],
                 exclude_patterns=exclude_patterns or [],
                 max_tokens=max_tokens,
+                encoding=encoding,
                 preset_name=preset_name,
                 merge_with_preset=merge_with_preset,
                 save_as_preset=save_as_preset

@@ -210,7 +210,7 @@ class FilterSetupService:
         encoding: str
     ) -> str:
         """
-        Сохраняет конфигурацию в .neira файл
+        Сохраняет конфигурацию в .neira файл или .neira/config.json
 
         Args:
             path: Путь к проекту
@@ -233,12 +233,25 @@ class FilterSetupService:
             "auto_generated": True
         }
 
-        config_path = Path(path) / ".neira"
+        project_path = Path(path)
+        neira_path = project_path / ".neira"
+
+        # ИСПРАВЛЕНИЕ: Проверяем, что .neira - директория или файл
+        if neira_path.exists() and neira_path.is_dir():
+            # Если .neira это директория, сохраняем в config.json внутри
+            config_path = neira_path / "config.json"
+            logger.info("📁 .neira is directory, saving to config.json inside")
+        else:
+            # Если .neira файл или не существует, используем как файл
+            config_path = neira_path
+
+        # Создаем директорию если нужно
+        config_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=2, ensure_ascii=False)
 
-        logger.info(f"Saved .neira config to {config_path}")
+        logger.info(f"✅ Saved .neira config to {config_path}")
         return str(config_path)
 
     def _generate_setup_report(

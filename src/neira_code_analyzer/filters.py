@@ -27,6 +27,11 @@ DEFAULT_EXCLUDES: list[str] = [
     # Временные билды (очень много мусора!)
     "tmp-*/**", "*/tmp-*/**", "**/tmp-*/**",
 
+    # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Огромные кэши и билды
+    ".turbo/**", "**/.turbo/**", r"*/\.turbo/**",  # Turbo кэш (до 554MB!)
+    ".next/**", "**/.next/**", r"*/\.next/**",    # Next.js кэш
+    ".nuxt/**", "**/.nuxt/**", r"*/\.nuxt/**",    # Nuxt кэш
+
     # Медиа файлы
     "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.ico", "*.webp",
     "*.wav", "*.mp3", "*.mp4", "*.avi", "*.mov",
@@ -37,8 +42,11 @@ DEFAULT_EXCLUDES: list[str] = [
     # Шрифты (много токенов для анализа)
     "*.woff", "*.woff2", "*.ttf", "*.eot", "*.otf",
 
-    # Бинарные и специальные файлы
+    # КРИТИЧЕСКОЕ: Бинарные и специальные файлы (включая большие native модuli)
     "*.blob", "*.bin", "*.exe", "*.dll", "*.db", "*.sqlite", "*.sqlite3",
+    "*.node", "*.dylib", "*.so", "*.pyd",  # Native модули Node.js
+    "**/native-messaging-host/**",  # Chrome extension native hosts (85MB файлы!)
+    "crxtesthost*", "**/crxtesthost*", "*/crxtesthost*",  # Конкретно эти файлы
 
     # Сборка и компиляция
     "dist/**", "**/dist/**", "build/**", "**/build/**", "out/**", "**/out/**",
@@ -58,11 +66,13 @@ DEFAULT_EXCLUDES: list[str] = [
     # Специфичные для IDE и окружений файлы
     "nbproject/**", "*.swp", "*.swo",
 
-    # Бинарные файлы (скомпилированные библиотеки)
+    # РАСШИРЕННОЕ: Бинарные файлы и библиотеки
     "*.so", "*.dll", "*.dylib", "*.pyd",
+    "*.a", "*.lib", "*.o", "*.obj",  # Статические библиотеки и объектные файлы
 
     # Специфичные для Electron/Tauri артефакты сборки
     "src-tauri/target/**", "**/src-tauri/target/**",
+    "**/Electron.app/**", "**/*electron*/**",  # Electron приложения
 
     # Тесты - основные паттерны
     "test/**", "tests/**", "__tests__/**", "spec/**",
@@ -114,36 +124,51 @@ DEFAULT_EXCLUDES: list[str] = [
     "/.storybook/public/", ".storybook/public/**",
 ]
 
-# 🚀 НОВЫЙ ФИЛЬТР: Исключение больших файлов для оптимизации производительности
-# Quick Feature Add - Константы для фильтрации по размеру файла
-MAX_FILE_SIZE_KB = 500  # По умолчанию исключаем файлы больше 500KB
+# 🚀 КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: Исключение огромных файлов
+# Обновлено из-за проблемы с файлом crxtesthost_simple (85.2MB > 10.0MB)
+MAX_FILE_SIZE_KB = 200  # УЖЕСТОЧЕНО: исключаем файлы больше 200KB
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_KB * 1024
+
+# КРИТИЧЕСКИЙ ЛИМИТ для совсем больших файлов (как crxtesthost_simple)
+CRITICAL_FILE_SIZE_MB = 5  # Файлы больше 5MB критичны
+CRITICAL_FILE_SIZE_BYTES = CRITICAL_FILE_SIZE_MB * 1024 * 1024
 
 # Паттерны больших файлов, которые обычно не нужны для анализа кода
 LARGE_FILE_EXTENSIONS = [
     # Большие данные и ресурсы
     "*.pdf", "*.doc", "*.docx", "*.ppt", "*.pptx", "*.xls", "*.xlsx",
-    # Архивы и пакеты
+    # Архивы и пакеты (КРИТИЧНЫЕ для проектов!)
     "*.zip", "*.tar", "*.gz", "*.7z", "*.rar", "*.deb", "*.rpm",
+    "*.tar.zst", "*.zst", "*.tar.gz", "*.tgz", "*.tar.bz2",  # Современные архивы
     # Большие файлы данных
-    "*.csv", "*.json", "*.xml", "*.yaml", "*.yml",  # если >500KB
+    "*.csv", "*.json", "*.xml", "*.yaml", "*.yml",  # если >200KB
     # Большие лог файлы
-    "*.log", "*.out", "*.err",  # если >500KB
+    "*.log", "*.out", "*.err",  # если >200KB
+    # НОВОЕ: Native и бинарные модули
+    "*.node", "*.dylib", "*.so", "*.dll", "*.pyd", "*.a", "*.lib",
+    # Electron специфичные огромные файлы
+    "*electron*", "crxtesthost*", "*.app", "*.framework",
 ]
 
 # Агрессивные исключения для code review (когда нужно сократить токены)
 AGGRESSIVE_EXCLUDES: list[str] = DEFAULT_EXCLUDES + [
     # Документация
-    "*.md", "README*", "CHANGELOG*", "LICENSE*",
-    "docs/**", "documentation/**",
+    "LICENSE*",
 
     # Конфигурационные файлы
-    "*.json", "package*.json", "*.yaml", "*.yml",
     "scripts/**", "tools/**", "*.sh", "*.bat",
 
     # Стили и разметка
-    "*.css", "*.scss", "*.less", "*.html",
+    "*.css", "*.scss", "*.less",
     "assets/**", "public/**", "static/**",
+
+    # КРИТИЧЕСКОЕ ДОПОЛНЕНИЕ: Архивы и сжатые файлы
+    "*.tar", "*.tar.gz", "*.tar.zst", "*.zip", "*.7z", "*.rar", "*.gz", "*.bz2",
+    "*.tgz", "*.txz", "*.zst",  # Современные форматы сжатия
+
+    # Большие данные и временные файлы
+    "*.dump", "*.bak", "*.old", "*.orig", "*.temp",
+    "**/cache/**", "**/caches/**", "**/temp/**", "**/tmp/**",
 ]
 
 # Паттерны для включения только основных файлов кода
@@ -218,9 +243,15 @@ BUILTIN_PRESETS: dict[str, dict[str, Any]] = {
         ],
         "exclude_patterns": DEFAULT_EXCLUDES + [
             "packages/*/dist/**", "packages/*/build/**", "packages/*/out/**",
-            "*.min.js", "*.min.css", "public/**", "certificates/**"
+            "*.min.js", "*.min.css", "public/**", "certificates/**",
+            # КРИТИЧЕСКИЕ ИСКЛЮЧЕНИЯ для больших Electron файлов
+            "**/Electron.app/**", "**/*Electron*/**", "**/electron/**",
+            "**/native-messaging-host/**", "crxtesthost*", "**/crxtesthost*",
+            "*.node", "*.dylib", "*.so", "*.dll", "*.pyd",  # Native модули
+            ".turbo/**", "**/.turbo/**",  # Турбо кэш
+            "*.tar.zst", "*.zst", "*.tar.gz",  # Сжатые архивы
         ],
-        "token_estimate": "Оптимизировано для Electron"
+        "token_estimate": "Оптимизировано для Electron (с исключением больших файлов)"
     }
 }
 

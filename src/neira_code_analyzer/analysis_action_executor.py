@@ -1,77 +1,44 @@
 """
 AnalysisActionExecutor - выполнение действий с кодом по анализу
 
+АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Теперь наследуется от BaseActionExecutor для устранения дублирования кода.
 Выделенный класс для выполнения JSON-команд от ИИ по анализу и исправлению кода.
 Поддерживает безопасное выполнение операций с файловой системой.
 """
 
+import ast
 import logging
-import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .base_action_executor import BaseActionExecutor, BaseExecutionSummary
+
 logger = logging.getLogger(__name__)
 
 @dataclass
-class AnalysisExecutionSummary:
-    """Сводка выполнения действий анализа"""
-    actions_executed: int
-    actions_succeeded: int
-    actions_failed: int
-    files_modified: list[str]
-    files_created: list[str]
-    files_backed_up: list[str]
-    errors: list[str]
-    duration_seconds: float
+class AnalysisExecutionSummary(BaseExecutionSummary):
+    """
+    Сводка выполнения действий анализа
+    
+    АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Теперь наследуется от BaseExecutionSummary для устранения дублирования
+    """
+    pass  # Все функциональность уже в базовом классе
 
-    @property
-    def success_rate(self) -> float:
-        """Процент успешно выполненных действий"""
-        if self.actions_executed == 0:
-            return 0.0
-        return (self.actions_succeeded / self.actions_executed) * 100
 
-class AnalysisActionExecutor:
+class AnalysisActionExecutor(BaseActionExecutor):
     """
     Выполняет JSON-команды от ИИ для анализа и исправления кода
 
+    АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Теперь наследуется от BaseActionExecutor для устранения дублирования.
     Принцип единственной ответственности: только выполнение действий.
     Поддерживает безопасные операции с файлами и откат изменений.
     """
 
     def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.backup_dir = None  # Будет установлена при инициализации сессии
-
-    def _validate_file_path(self, file_path: Path, project_path: Path) -> bool:
-        """
-        Проверяет что путь к файлу находится внутри проекта (защита от Path Traversal)
-
-        Args:
-            file_path: Путь к файлу
-            project_path: Корневой путь проекта
-
-        Returns:
-            bool: True если путь безопасен
-        """
-        try:
-            # Разрешаем все символические ссылки
-            resolved_file = file_path.resolve()
-            resolved_project = project_path.resolve()
-
-            # Проверяем что файл находится внутри проекта
-            try:
-                resolved_file.relative_to(resolved_project)
-                return True
-            except ValueError:
-                self.logger.error(f"Небезопасный путь (за пределами проекта): {file_path}")
-                return False
-
-        except Exception as e:
-            self.logger.error(f"Ошибка валидации пути {file_path}: {e}")
-            return False
+        super().__init__()
+        # Специфичная для анализа инициализация, если потребуется
 
     def execute_actions(
         self,
@@ -186,28 +153,15 @@ class AnalysisActionExecutor:
         project_path: Path,
         summary: AnalysisExecutionSummary
     ) -> bool:
-        """Создает новый файл"""
+        """
+        Создает новый файл
+        
+        АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Использует _create_file_safely из базового класса
+        """
         file_path = project_path / action.get("path", "")
         content = action.get("content", "")
 
-        # Проверяем безопасность пути
-        if not self._validate_file_path(file_path, project_path):
-            self.logger.error(f"Отклонен небезопасный путь: {file_path}")
-            return False
-
-        if file_path.exists():
-            self.logger.warning(f"Файл {file_path} уже существует, пропускаем создание")
-            return False
-
-        # Создаем папки если нужно
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        summary.files_created.append(str(file_path))
-        self.logger.info(f"Создан файл: {file_path}")
-        return True
+        return self._create_file_safely(file_path, content, project_path, summary)
 
     def _update_file(
         self,
@@ -215,29 +169,15 @@ class AnalysisActionExecutor:
         project_path: Path,
         summary: AnalysisExecutionSummary
     ) -> bool:
-        """Обновляет существующий файл"""
+        """
+        Обновляет существующий файл
+        
+        АРХИТЕКТУРНОЕ ИСПРАВЛЕНИЕ: Использует _update_file_safely из базового класса
+        """
         file_path = project_path / action.get("path", "")
         content = action.get("content", "")
 
-        # Проверяем безопасность пути
-        if not self._validate_file_path(file_path, project_path):
-            self.logger.error(f"Отклонен небезопасный путь: {file_path}")
-            return False
-
-        if not file_path.exists():
-            self.logger.error(f"Файл {file_path} не существует")
-            return False
-
-        # Создаем бэкап перед изменением
-        if self._backup_file_to_backup_dir(file_path):
-            summary.files_backed_up.append(str(file_path))
-
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        summary.files_modified.append(str(file_path))
-        self.logger.info(f"Обновлен файл: {file_path}")
-        return True
+        return self._update_file_safely(file_path, content, project_path, summary)
 
     def _backup_file(
         self,
@@ -245,16 +185,16 @@ class AnalysisActionExecutor:
         project_path: Path,
         summary: AnalysisExecutionSummary
     ) -> bool:
-        """Создает бэкап файла"""
+        """Создает резервную копию файла"""
         file_path = project_path / action.get("path", "")
 
-        if not file_path.exists():
-            self.logger.error(f"Файл {file_path} не существует для бэкапа")
+        # Проверяем безопасность пути
+        if not self._validate_file_path(file_path, project_path):
+            self.logger.error(f"Отклонен небезопасный путь: {file_path}")
             return False
 
         if self._backup_file_to_backup_dir(file_path):
             summary.files_backed_up.append(str(file_path))
-            self.logger.info(f"Создан бэкап файла: {file_path}")
             return True
 
         return False
@@ -265,7 +205,14 @@ class AnalysisActionExecutor:
         project_path: Path,
         summary: AnalysisExecutionSummary
     ) -> bool:
-        """Рефакторинг функции в файле"""
+        """
+        Рефакторинг функции в файле с использованием AST для безопасного парсинга
+        
+        ИСПРАВЛЕНИЕ: Заменен небезопасный regex на AST-парсер для:
+        - Надежной обработки декораторов и аннотаций типов
+        - Защиты от ReDoS-атак
+        - Корректной работы с нестандартным форматированием
+        """
         file_path = project_path / action.get("path", "")
         function_name = action.get("function_name", "")
         new_content = action.get("new_function_content", "")
@@ -291,36 +238,130 @@ class AnalysisActionExecutor:
             with open(file_path, encoding='utf-8') as f:
                 content = f.read()
 
-            # Улучшенная логика замены - ищем функцию по паттерну
-            import re
-
-            # Паттерн для поиска Python функций
-            function_pattern = rf'(def\s+{re.escape(function_name)}\s*\([^:]*\):.*?)(?=\n(?:def\s|\w|\Z))'
-
+            # Безопасный AST-парсинг вместо regex
             if file_path.suffix == '.py':
-                match = re.search(function_pattern, content, re.DOTALL)
-                if match:
-                    # Заменяем найденную функцию
-                    updated_content = content.replace(match.group(1), new_content.strip())
-
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(updated_content)
-
-                    summary.files_modified.append(str(file_path))
-                    self.logger.info(f"Рефакторинг функции {function_name} в {file_path} выполнен")
-                    return True
-                else:
-                    self.logger.warning(f"Функция {function_name} не найдена в {file_path}")
-                    return False
+                return self._refactor_python_function_with_ast(
+                    content, file_path, function_name, new_content, summary
+                )
             else:
-                # Для не-Python файлов делаем базовую замену
+                # Для не-Python файлов используем простую замену
                 self.logger.info(f"Базовая замена для {file_path.suffix} файла")
-                # TODO: Добавить поддержку других языков
-                return False
+                return self._refactor_non_python_function(
+                    content, file_path, function_name, new_content, summary
+                )
 
         except Exception as e:
             self.logger.error(f"Ошибка рефакторинга функции: {e}")
             return False
+
+    def _refactor_python_function_with_ast(
+        self,
+        content: str,
+        file_path: Path,
+        function_name: str,
+        new_content: str,
+        summary: AnalysisExecutionSummary
+    ) -> bool:
+        """
+        Безопасный рефакторинг Python функции с использованием AST
+        """
+        try:
+            # Парсим код в AST
+            tree = ast.parse(content)
+
+            # Ищем функцию в AST
+            function_node = None
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                    function_node = node
+                    break
+
+            if function_node is None:
+                self.logger.warning(f"Функция {function_name} не найдена в {file_path}")
+                return False
+
+            # Получаем границы функции в исходном коде
+            lines = content.splitlines(keepends=True)
+
+            # Находим начало функции (с учетом декораторов)
+            start_line = function_node.lineno - 1
+            if function_node.decorator_list:
+                start_line = function_node.decorator_list[0].lineno - 1
+
+            # Находим конец функции
+            end_line = function_node.end_lineno if hasattr(function_node, 'end_lineno') else None
+
+            if end_line is None:
+                # Fallback для старых версий Python
+                end_line = self._find_function_end_line(lines, start_line, function_name)
+
+            # Заменяем функцию
+            new_lines = lines[:start_line] + [new_content + '\n'] + lines[end_line:]
+            updated_content = ''.join(new_lines)
+
+            # Проверяем синтаксис нового кода
+            try:
+                ast.parse(updated_content)
+            except SyntaxError as e:
+                self.logger.error(f"Новый код содержит синтаксические ошибки: {e}")
+                return False
+
+            # Сохраняем изменения
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(updated_content)
+
+            summary.files_modified.append(str(file_path))
+            self.logger.info(f"AST-рефакторинг функции {function_name} в {file_path} выполнен успешно")
+            return True
+
+        except SyntaxError as e:
+            self.logger.error(f"Синтаксическая ошибка в исходном файле {file_path}: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Ошибка AST-рефакторинга: {e}")
+            return False
+
+    def _find_function_end_line(self, lines: list[str], start_line: int, function_name: str) -> int:
+        """
+        Находит последнюю строку функции для старых версий Python без end_lineno
+        """
+        indent_level = None
+
+        for i in range(start_line, len(lines)):
+            line = lines[i]
+
+            # Определяем уровень отступа функции
+            if indent_level is None and line.strip().startswith('def '):
+                indent_level = len(line) - len(line.lstrip())
+                continue
+
+            # Если нашли строку с меньшим отступом (или без отступа), это конец функции
+            if line.strip() and indent_level is not None:
+                current_indent = len(line) - len(line.lstrip())
+                if current_indent <= indent_level and not line.strip().startswith('#'):
+                    return i
+
+        return len(lines)
+
+    def _refactor_non_python_function(
+        self,
+        content: str,
+        file_path: Path,
+        function_name: str,
+        new_content: str,
+        summary: AnalysisExecutionSummary
+    ) -> bool:
+        """
+        Простая замена для не-Python файлов
+        TODO: Добавить поддержку других языков с соответствующими парсерами
+        """
+        # Базовая замена по паттерну имени функции
+        if function_name in content:
+            # Это очень простая реализация, можно улучшить
+            self.logger.warning(f"Простая замена для {file_path.suffix} файлов может быть неточной")
+            return False
+
+        return False
 
     def _add_comment(
         self,
@@ -563,48 +604,3 @@ class AnalysisActionExecutor:
         summary.files_created.append(str(doc_path))
         self.logger.info(f"Создана документация: {doc_path}")
         return True
-
-    def _backup_file_to_backup_dir(self, file_path: Path) -> bool:
-        """Создает бэкап файла в папку бэкапов"""
-        if not self.backup_dir:
-            return False
-
-        try:
-            backup_path = self.backup_dir / file_path.name
-            shutil.copy2(file_path, backup_path)
-            return True
-        except Exception as e:
-            self.logger.error(f"Ошибка создания бэкапа {file_path}: {e}")
-            return False
-
-    def rollback_changes(self, session_id: str, project_path: Path) -> bool:
-        """
-        Откатывает изменения сессии
-
-        Args:
-            session_id: ID сессии для отката
-            project_path: Путь к проекту
-
-        Returns:
-            bool: True если откат успешен
-        """
-        backup_dir = project_path / ".neira" / "backups" / session_id
-
-        if not backup_dir.exists():
-            self.logger.warning(f"Папка бэкапов {backup_dir} не найдена")
-            return False
-
-        try:
-            # Восстанавливаем файлы из бэкапов
-            for backup_file in backup_dir.iterdir():
-                if backup_file.is_file():
-                    original_path = project_path / backup_file.name
-                    shutil.copy2(backup_file, original_path)
-                    self.logger.info(f"Восстановлен файл: {original_path}")
-
-            self.logger.info(f"Откат сессии {session_id} выполнен")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Ошибка отката сессии {session_id}: {e}")
-            return False

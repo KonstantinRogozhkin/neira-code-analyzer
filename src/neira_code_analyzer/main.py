@@ -395,8 +395,21 @@ async def get_analyze_tool(arguments: dict) -> list[TextContent]:
 
         logger.info(f"Delegating code review to ai_analyzer for path: {validated_path}")
 
+        # ИСПРАВЛЕНИЕ: Фильтруем параметры для соответствия сигнатуре perform_code_review
+        valid_params = {
+            'path', 'template_name', 'include_patterns', 'exclude_patterns',
+            'max_tokens', 'ai_model', 'encoding', 'preset_name',
+            'merge_with_preset', 'save_as_preset', 'user_query', 'session_id'
+        }
+
+        filtered_arguments = {k: v for k, v in arguments_copy.items() if k in valid_params}
+
+        # Устанавливаем значения по умолчанию для обязательных параметров
+        if 'encoding' not in filtered_arguments:
+            filtered_arguments['encoding'] = 'cl100k'
+
         # Делегируем выполнение специализированному модулю
-        result_text = await ai_analyzer.perform_code_review(**arguments_copy)
+        result_text = await ai_analyzer.perform_code_review(**filtered_arguments)
         return [TextContent(type="text", text=result_text)]
 
     except Exception as e:

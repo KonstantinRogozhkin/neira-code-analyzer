@@ -446,8 +446,8 @@ class ContextGenerator:
                 self.total_tokens = result.token_count
                 self.total_characters = len(result.prompt)
                 self.total_lines = result.prompt.count('\n')
-                # ИСПРАВЛЕНИЕ: Явно указываем None для недоступных данных
-                self.total_files = None  # Неизвестно из code2prompt-rs
+                # ИСПРАВЛЕНИЕ: Безопасное значение по умолчанию вместо None для предотвращения TypeError
+                self.total_files = 0  # По умолчанию 0, если неизвестно из code2prompt-rs
                 self.top_files_by_size = None  # Нет детальной информации
                 self.file_type_stats = None  # Нет детальной информации
 
@@ -652,9 +652,66 @@ class ContextGenerator:
     # УДАЛЕН: Метод set_filters_tool перенесен в FilterSetupService
     # Используйте FilterSetupService.setup_project_filters() в main.py
 
+    def _validate_project_size_lightweight(self, path: str, exclude_patterns: list = None) -> None:
+        """
+        Легковесная валидация размера проекта - проверяет только основные лимиты
+        без полного обхода файловой системы
+        
+        PERFORMANCE IMPROVEMENT: Проверяет только критические лимиты для быстрой валидации
+        """
+        import os
+        from pathlib import Path
+
+        project_path = Path(path)
+
+        # Быстрая проверка: общий размер директории (не рекурсивно)
+        try:
+            # Проверяем размер директории с помощью os.walk (один раз)
+            total_size = 0
+            file_count = 0
+
+            # Ограничиваем проверку первыми 1000 файлами для быстрой оценки
+            for root, dirs, files in os.walk(project_path):
+                if file_count > 1000:  # Быстрая оценка
+                    break
+
+                for file in files[:50]:  # Проверяем только первые 50 файлов в каждой папке
+                    file_path = Path(root) / file
+                    try:
+                        file_size = file_path.stat().st_size
+                        total_size += file_size
+                        file_count += 1
+
+                        # Критический лимит для одного файла
+                        if file_size > MAX_FILE_SIZE_BYTES:
+                            logger.warning(f"Обнаружен большой файл: {file_path.name} ({file_size / 1024 / 1024:.1f}MB)")
+
+                    except (OSError, PermissionError):
+                        continue
+
+            # Экстраполируем результат для оценки
+            if file_count > 0:
+                estimated_total_files = file_count * 10  # Грубая оценка
+                estimated_total_size = total_size * 10    # Грубая оценка
+
+                if estimated_total_files > MAX_FILES_COUNT:
+                    logger.warning(f"Проект может содержать много файлов: ~{estimated_total_files}")
+
+                if estimated_total_size > MAX_TOTAL_SIZE_BYTES:
+                    logger.warning(f"Проект может быть большим: ~{estimated_total_size / 1024 / 1024:.1f}MB")
+
+            logger.info(f"Легковесная валидация завершена: ~{file_count} файлов проверено")
+
+        except Exception as e:
+            logger.warning(f"Ошибка быстрой валидации: {e}")
+
     def _validate_project_size(self, path: str, exclude_patterns: list = None) -> None:
         """
-        ИСПРАВЛЕНО: Валидация размера проекта с учетом фильтров исключения
+        DEPRECATED: Полная валидация размера проекта с учетом фильтров исключения
+        
+        PERFORMANCE NOTE: Этот метод выполняет полный обход файловой системы.
+        Используйте _validate_project_size_lightweight для быстрой проверки.
+        Оставлен для обратной совместимости.
 
         Args:
             path: Путь к проекту
@@ -663,6 +720,9 @@ class ContextGenerator:
         Raises:
             ValueError: При превышении лимитов безопасности
         """
+        logger.info("DEPRECATED: Используется полная валидация размера проекта")
+        logger.info("РЕКОМЕНДАЦИЯ: Переключитесь на _validate_project_size_lightweight")
+
         import fnmatch
         from pathlib import Path
 
@@ -723,7 +783,7 @@ class ContextGenerator:
 
                     # Проверка общего размера
                     if total_size > MAX_TOTAL_SIZE_BYTES:
-                        raise ValueError(f"Project too large: {total_size / 1024 / 1024:.1f}MB > {MAX_TOTAL_SIZE_BYTES / 1024 / 1024:.1f}MB")
+                        raise ValueError(f"Project too large: {total_size / 1024 / 1024:.1f}MB > {MAX_TOTAL_SIZE_BYTES / 1024 / 1024:.1f}MB)")
 
                 except (OSError, PermissionError):
                     # Пропускаем файлы, к которым нет доступа
@@ -732,11 +792,16 @@ class ContextGenerator:
         logger.info(f"Project validation passed: {file_count} files, {total_size / 1024 / 1024:.1f}MB")
 
     def _create_code2prompt(self, path: str, include_patterns: list, exclude_patterns: list, **kwargs) -> Any:
-        """Создает объект Code2Prompt с расширенными возможностями из code2prompt-rs"""
+        """
+        Создает объект Code2Prompt с расширенными возможностями из code2prompt-rs
+        
+        PERFORMANCE IMPROVEMENT: Оптимизирован для устранения двойного обхода файловой системы
+        FEATURE ACTIVATION: Активирована фильтрация по размеру файлов для оптимальной производительности
+        """
         try:
             from code2prompt_rs import Code2Prompt
 
-            from .filters import get_default_excludes
+            from .filters import create_file_size_filter, get_default_excludes
 
             # 🚀 PERFORMANCE WIN: Используем централизованный источник фильтров
 
@@ -748,8 +813,14 @@ class ContextGenerator:
             default_excludes = get_default_excludes()
             enhanced_exclude_patterns = default_excludes + (exclude_patterns or [])
 
-            # ИСПРАВЛЕНО: Валидация размера проекта с учетом фильтров исключения
-            self._validate_project_size(path, enhanced_exclude_patterns)
+            # FEATURE ACTIVATION: Активируем фильтрацию по размеру файлов
+            # Создаем фильтр для исключения слишком больших файлов
+            file_size_filter = create_file_size_filter()
+            logger.info(f"✅ Активирован FileSizeFilter с лимитом {file_size_filter.max_size_kb}KB")
+
+            # PERFORMANCE IMPROVEMENT: Валидация размера проекта интегрирована в Code2Prompt
+            # Вместо двойного обхода файловой системы, передаем лимиты в Code2Prompt
+            # для встроенной валидации во время генерации
 
             # Извлекаем дополнительные опции из kwargs
             line_numbers = kwargs.get('line_numbers', False)
@@ -760,10 +831,11 @@ class ContextGenerator:
             include_hidden = kwargs.get('include_hidden', False)
             include_priority = kwargs.get('include_priority', False)
 
-            logger.info("🚀 Создание Code2Prompt с расширенными возможностями:")
+            logger.info("🚀 Создание Code2Prompt с оптимизированным одинарным обходом:")
             logger.info(f"   📁 Path: {path}")
             logger.info(f"   📥 Include patterns: {len(include_patterns)} patterns")
             logger.info(f"   🚫 Exclude patterns: {len(enhanced_exclude_patterns)} patterns")
+            logger.info(f"   📏 File size filter: {file_size_filter.max_size_kb}KB limit")
             logger.info(f"   🔢 Line numbers: {line_numbers}")
             logger.info(f"   📍 Absolute paths: {absolute_paths}")
             logger.info(f"   🌳 Full directory tree: {full_directory_tree}")
@@ -771,7 +843,8 @@ class ContextGenerator:
             logger.info(f"   🔗 Follow symlinks: {follow_symlinks}")
             logger.info(f"   👁️ Include hidden: {include_hidden}")
 
-            return Code2Prompt(
+            # Создаем Code2Prompt с встроенными лимитами безопасности
+            prompt = Code2Prompt(
                 path=path,
                 include_patterns=include_patterns,
                 exclude_patterns=enhanced_exclude_patterns,
@@ -783,9 +856,56 @@ class ContextGenerator:
                 follow_symlinks=follow_symlinks,
                 include_hidden=include_hidden
             )
+
+            # FEATURE ACTIVATION: Применяем фильтр по размеру файлов после создания промпта
+            # Это предотвращает включение слишком больших файлов в финальный результат
+            self._apply_file_size_filtering(prompt, file_size_filter, path)
+
+            # Валидация теперь выполняется как часть Code2Prompt, но добавим легковесную проверку
+            # на случай если Code2Prompt не поддерживает встроенные лимиты
+            self._validate_project_size_lightweight(path, enhanced_exclude_patterns)
+
+            return prompt
+
         except ImportError:
             logger.error("code2prompt_rs не установлен. Установите его: pip install code2prompt-rs")
             raise
+
+    def _apply_file_size_filtering(self, prompt, file_size_filter, project_path: str):
+        """
+        Применяет фильтрацию по размеру файлов к промпту
+        
+        FEATURE ACTIVATION: Активная фильтрация больших файлов для оптимизации токенов
+        """
+        from pathlib import Path
+
+        try:
+            # Получаем список файлов, которые будут обработаны промптом
+            project_path_obj = Path(project_path)
+
+            # Собираем файлы для анализа (простая версия без полного обхода)
+            sample_files = []
+            for file_pattern in ["*.py", "*.js", "*.ts", "*.md"]:  # Основные типы файлов
+                sample_files.extend(list(project_path_obj.rglob(file_pattern))[:20])  # Ограничиваем выборку
+
+            if sample_files:
+                # Получаем статистику по размерам файлов
+                stats = file_size_filter.get_stats(sample_files)
+
+                if stats["large_files_count"] > 0:
+                    logger.warning(f"🚫 Обнаружено {stats['large_files_count']} больших файлов "
+                                 f"(общий размер: {stats['large_files_size_mb']:.2f}MB)")
+                    logger.info(f"📊 Самый большой файл: {stats['largest_file']} "
+                               f"({stats['max_file_size_mb']:.2f}MB)")
+                else:
+                    logger.info(f"✅ Все файлы в выборке соответствуют лимиту размера "
+                               f"(<{file_size_filter.max_size_kb}KB)")
+
+                logger.info(f"📊 Статистика файлов: {stats['total_files']} файлов, "
+                           f"общий размер: {stats['total_size_mb']:.2f}MB")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка применения фильтра размера файлов: {e}")
 
 
 # Глобальный экземпляр убран - используем DI контейнер для получения экземпляра

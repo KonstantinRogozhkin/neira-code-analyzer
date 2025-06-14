@@ -412,6 +412,12 @@ def get_analyze_schema() -> dict[str, Any]:
                 "type": "string",
                 "description": "ID существующей сессии для продолжения диалога. Если НЕ указан или пустой - создается новая сессия. Если указан - продолжается существующая сессия с этим ID.",
                 "default": ""
+            },
+            "encoding": {
+                "type": "string",
+                "description": "Tokenizer encoding for token counting. 'cl100k' for ChatGPT/GPT-4, 'p50k' for Codex, 'gpt2' for GPT-3, 'o200k' for GPT-4o.",
+                "enum": ["cl100k", "p50k", "gpt2", "o200k"],
+                "default": "cl100k"
             }
         }
     }
