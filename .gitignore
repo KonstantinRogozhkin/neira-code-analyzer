@@ -21,5 +21,14 @@ docs/archive/
 analysis/
 analysis/*
 
+# Environment files - SECURITY: Prevent API key leaks
+.env
+.env.*
+**/.env*
+*.key
+.google-api-key
+.gemini-api-key
+.neira-api-key
+
 # neira-code-analyzer project filters (add manually if needed for team)
 .neira
