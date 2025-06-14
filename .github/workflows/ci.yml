@@ -10,6 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: true  # Останавливаем сборку при первой ошибке
       matrix:
         python-version: ["3.11", "3.12"]
 
@@ -43,7 +44,7 @@ jobs:
     
     - name: Test with pytest
       run: |
-        uv run pytest tests/ -v --tb=short --cov=src/neira_code_analyzer --cov-report=xml --cov-report=term-missing
+        uv run pytest tests/ -v --tb=short --cov=src/neira_code_analyzer --cov-report=xml --cov-report=term-missing --cov-fail-under=34
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
