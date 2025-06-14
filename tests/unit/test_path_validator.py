@@ -4,12 +4,17 @@
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
 import pytest
-from src.neira_code_analyzer.path_validator import (
+
+from neira_code_analyzer.path_validator import (
     PathValidationError,
     validate_file_path,
     validate_project_path,

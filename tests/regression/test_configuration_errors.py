@@ -7,10 +7,15 @@
 - Правильная обработка отсутствующих пресетов и шаблонов
 """
 
+import sys
 from pathlib import Path
 
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
 import pytest
-from src.neira_code_analyzer.mcp_schemas import ConfigurationError
+
+from neira_code_analyzer.mcp_schemas import ConfigurationError
 
 
 class TestConfigurationErrorRegression:

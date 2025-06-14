@@ -3,13 +3,18 @@
 """
 
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
 import pytest
-from src.neira_code_analyzer.analysis_agent import AnalysisAgent
-from src.neira_code_analyzer.analysis_session_manager import AnalysisSessionState
+
+from neira_code_analyzer.analysis_agent import AnalysisAgent
+from neira_code_analyzer.analysis_session_manager import AnalysisSessionState
 
 
 class TestSessionIdParameter:

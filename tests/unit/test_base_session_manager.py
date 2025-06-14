@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from src.neira_code_analyzer.base_session_manager import BaseSessionManager, BaseSessionState
+from neira_code_analyzer.base_session_manager import BaseSessionManager, BaseSessionState
 
 
 # Тестовые классы для проверки абстрактных методов

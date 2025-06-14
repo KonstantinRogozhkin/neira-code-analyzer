@@ -10,10 +10,16 @@
 
 import asyncio
 import os
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
 import pytest
-from src.neira_code_analyzer.ai_utils import check_api_key, generate_ai_review_async, load_env_file
+
+from neira_code_analyzer.ai_utils import check_api_key, generate_ai_review_async, load_env_file
 
 
 class TestAsyncAIFunctions:
@@ -27,8 +33,8 @@ class TestAsyncAIFunctions:
         test_model = "gemini-2.5-pro-preview-06-05"
         expected_response = "Test AI analysis response"
 
-        with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_api_key"), \
-             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
+        with patch('neira_code_analyzer.ai_utils.check_api_key', return_value="test_api_key"), \
+             patch('neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
             # Мокируем клиент через singleton
             mock_client = MagicMock()
@@ -54,9 +60,9 @@ class TestAsyncAIFunctions:
         # Arrange
         test_prompt = "Test prompt"
 
-        # Убираем все API ключи из окружения и мокируем check_api_key чтобы вызвать ошибку
+        # Убираем все API ключи из окружения и мокируем get_client чтобы вызвать ошибку через check_api_key
         with patch.dict(os.environ, {}, clear=True), \
-             patch('src.neira_code_analyzer.ai_utils.check_api_key', side_effect=ValueError("API ключ не найден")):
+             patch('neira_code_analyzer.ai_utils._ai_client_singleton.get_client', side_effect=ValueError("API ключ не найден")):
             # Act & Assert
             # Ошибка оборачивается в Exception с префиксом "Ошибка при вызове Google AI API"
             with pytest.raises(Exception, match="Ошибка при вызове Google AI API: API ключ не найден"):
@@ -68,8 +74,8 @@ class TestAsyncAIFunctions:
         # Arrange
         test_prompt = "Test prompt"
 
-        with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
-             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
+        with patch('neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
+             patch('neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
@@ -85,8 +91,8 @@ class TestAsyncAIFunctions:
         # Arrange
         test_prompt = "Test prompt"
 
-        with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
-             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
+        with patch('neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
+             patch('neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
@@ -229,8 +235,8 @@ class TestAsyncArchitecture:
         # Arrange
         start_time = asyncio.get_event_loop().time()
 
-        with patch('src.neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
-             patch('src.neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
+        with patch('neira_code_analyzer.ai_utils.check_api_key', return_value="test_key"), \
+             patch('neira_code_analyzer.ai_utils._ai_client_singleton.get_client') as mock_get_client:
 
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
