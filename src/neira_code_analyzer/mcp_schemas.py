@@ -6,7 +6,8 @@
 и функции для их компоновки в финальные схемы инструментов.
 """
 
-from typing import Dict, Any, List
+from typing import Any
+
 
 # 🚨 Исключения для конфигурации
 class ConfigurationError(Exception):
@@ -15,11 +16,11 @@ class ConfigurationError(Exception):
 
 # 🎯 Динамическая генерация enum'ов для устранения дублирования
 
-def _get_available_presets() -> List[str]:
+def _get_available_presets() -> list[str]:
     """
     Динамически получает список доступных пресетов из FilterPresetManager
     Устраняет дублирование хардкоженных enum списков
-    
+
     Raises:
         ConfigurationError: При ошибке загрузки пресетов (Fail-Fast подход)
     """
@@ -33,11 +34,11 @@ def _get_available_presets() -> List[str]:
         logger.critical(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось загрузить пресеты фильтров: {e}")
         raise ConfigurationError(f"Failed to load filter presets: {e}") from e
 
-def _get_available_templates() -> List[str]:
+def _get_available_templates() -> list[str]:
     """
     Динамически получает список доступных шаблонов из TemplateManager
     Устраняет дублирование хардкоженных enum списков
-    
+
     Raises:
         ConfigurationError: При ошибке загрузки шаблонов (Fail-Fast подход)
     """
@@ -68,13 +69,13 @@ COMMON_INCLUDE_PATTERNS_SCHEMA = {
 }
 
 COMMON_EXCLUDE_PATTERNS_SCHEMA = {
-    "type": "array", 
+    "type": "array",
     "items": {"type": "string"},
     "description": "List of glob patterns for files to exclude (e.g., ['*.txt', 'node_modules/**', '*.log']). Applied after include patterns. Common exclusions: ['node_modules/**', '*.log', '*.tmp', 'dist/**', 'build/**']. Can be overridden by preset_name parameter.",
     "default": []
 }
 
-def _get_preset_name_schema() -> Dict[str, Any]:
+def _get_preset_name_schema() -> dict[str, Any]:
     """Динамически генерируемая схема для пресетов"""
     return {
         "type": "string",
@@ -83,7 +84,7 @@ def _get_preset_name_schema() -> Dict[str, Any]:
     }
 
 COMMON_MERGE_WITH_PRESET_SCHEMA = {
-    "type": "boolean", 
+    "type": "boolean",
     "description": "If true and preset_name is specified, merges preset patterns with manually specified include_patterns and exclude_patterns. If false, preset completely overrides manual patterns.",
     "default": False
 }
@@ -118,7 +119,7 @@ COMMON_ENCODING_SCHEMA = {
     "enum": ["cl100k", "p50k", "gpt2", "o200k"]
 }
 
-def _get_template_name_schema() -> Dict[str, Any]:
+def _get_template_name_schema() -> dict[str, Any]:
     """Динамически генерируемая схема для шаблонов"""
     return {
         "type": "string",
@@ -133,7 +134,7 @@ CUSTOM_TEMPLATE_SCHEMA = {
 
 # 🔧 Специализированные схемы для конкретных инструментов
 
-def get_context_schema() -> Dict[str, Any]:
+def get_context_schema() -> dict[str, Any]:
     """
     Схема для инструмента get_context
     """
@@ -199,7 +200,7 @@ def get_context_schema() -> Dict[str, Any]:
                 "include_patterns": ["*.py", "*.md", "*.txt"]
             },
             {
-                "description": "Security audit for web application", 
+                "description": "Security audit for web application",
                 "path": "/path/to/webapp",
                 "template_name": "security-audit",
                 "include_patterns": ["*.py", "*.js", "*.html", "*.sql"]
@@ -222,7 +223,7 @@ def get_context_schema() -> Dict[str, Any]:
         ]
     }
 
-def get_set_filters_schema() -> Dict[str, Any]:
+def get_set_filters_schema() -> dict[str, Any]:
     """
     Схема для инструмента set_filters
     """
@@ -277,7 +278,7 @@ def get_set_filters_schema() -> Dict[str, Any]:
         ]
     }
 
-def get_get_templates_schema() -> Dict[str, Any]:
+def get_get_templates_schema() -> dict[str, Any]:
     """
     Схема для инструмента get_templates
     """
@@ -292,7 +293,7 @@ def get_get_templates_schema() -> Dict[str, Any]:
         }
     }
 
-def get_manage_presets_schema() -> Dict[str, Any]:
+def get_manage_presets_schema() -> dict[str, Any]:
     """
     Схема для инструмента manage_presets
     """
@@ -368,7 +369,7 @@ def get_manage_presets_schema() -> Dict[str, Any]:
         ]
     }
 
-def get_analyze_schema() -> Dict[str, Any]:
+def get_analyze_schema() -> dict[str, Any]:
     """
     Схема для инструмента get_analyze
     """
@@ -415,7 +416,33 @@ def get_analyze_schema() -> Dict[str, Any]:
         }
     }
 
-def get_gen_docs_schema() -> Dict[str, Any]:
+def get_project_config_schema() -> dict[str, Any]:
+    """
+    Схема для инструмента project_config
+    Простой инструмент для просмотра конфигурации проекта
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "path": {
+                **COMMON_PATH_SCHEMA,
+                "description": "Full path to the project directory to check configuration (e.g., '/Users/username/Projects/my-project'). The tool will search for .neira config files in this directory."
+            }
+        },
+        "examples": [
+            {
+                "description": "Check project configuration",
+                "path": "/Users/username/Projects/my-project"
+            },
+            {
+                "description": "Check current directory configuration",
+                "path": "."
+            }
+        ],
+        "required": []
+    }
+
+def get_gen_docs_schema() -> dict[str, Any]:
     """
     Схема для инструмента gen_docs - автоматическая генерация и обновление документации
     """
@@ -437,7 +464,7 @@ def get_gen_docs_schema() -> Dict[str, Any]:
                 "default": 3
             },
             "max_file_size": {
-                "type": "integer", 
+                "type": "integer",
                 "description": "Maximum size of markdown files to process (in lines). Files larger than this will be archived or compressed.",
                 "minimum": 50,
                 "maximum": 1000,
@@ -482,7 +509,7 @@ def get_gen_docs_schema() -> Dict[str, Any]:
             },
             {
                 "description": "Minimal docs update with changelog",
-                "path": "/path/to/project", 
+                "path": "/path/to/project",
                 "docs_structure": "minimal",
                 "update_changelog": True,
                 "git_scan_days": 7
@@ -502,35 +529,36 @@ def get_gen_docs_schema() -> Dict[str, Any]:
 TOOL_SCHEMAS = {
     "get_context": get_context_schema,
     "set_filters": get_set_filters_schema,
+    "project_config": get_project_config_schema,
     "get_templates": get_get_templates_schema,
     "manage_presets": get_manage_presets_schema,
     "get_analyze": get_analyze_schema,
     "gen_docs": get_gen_docs_schema
 }
 
-def get_tool_schema(tool_name: str) -> Dict[str, Any]:
+def get_tool_schema(tool_name: str) -> dict[str, Any]:
     """
     Получить схему для указанного инструмента
-    
+
     Args:
         tool_name: Название инструмента
-        
+
     Returns:
         Dict[str, Any]: Схема инструмента
-        
+
     Raises:
         ValueError: Если инструмент не найден
     """
     if tool_name not in TOOL_SCHEMAS:
         raise ValueError(f"Unknown tool: {tool_name}. Available tools: {list(TOOL_SCHEMAS.keys())}")
-    
+
     return TOOL_SCHEMAS[tool_name]()
 
-def get_all_tool_schemas() -> Dict[str, Dict[str, Any]]:
+def get_all_tool_schemas() -> dict[str, dict[str, Any]]:
     """
     Получить схемы всех инструментов
-    
+
     Returns:
         Dict[str, Dict[str, Any]]: Словарь {название_инструмента: схема}
     """
-    return {name: schema_func() for name, schema_func in TOOL_SCHEMAS.items()} 
+    return {name: schema_func() for name, schema_func in TOOL_SCHEMAS.items()}
