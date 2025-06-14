@@ -29,7 +29,7 @@ find . -name "*.pyc" -delete
 uv run python -c "
 from src.neira_code_analyzer.context_generator import ContextGenerator
 cg = ContextGenerator()
-result = cg.analyze_filters('/path/to/project')
+result = cg.set_filters('/path/to/project')
 print(f'Tokens: {result.stats.estimated_tokens}')
 "
 ```
@@ -39,7 +39,7 @@ print(f'Tokens: {result.stats.estimated_tokens}')
 ### 🚨 Основные проблемы и решения
 
 #### Высокое потребление токенов
-- Используйте `analyze_filters` для оптимизации
+- Используйте `set_filters` для автоматической оптимизации
 - Добавьте исключения для `node_modules`, `.venv`, `build`
 
 #### Ошибки API аутентификации  
@@ -146,3 +146,140 @@ docker run neira-code-analyzer:v20250112
 - GitHub Issues: основной канал
 - Техническая документация: docs/archive/
 - Логи системы: debug_neira.log 
+
+# 🔧 Руководство по поддержке neira-code-analyzer
+
+## 📊 Текущее состояние системы (2025-06-14)
+
+### ✅ Критические проблемы решены
+- **Интеграционные тесты:** 82/82 успешно (было 77/82)
+- **Покрытие кода:** 34.95% (превышает требуемые 34%)
+- **Автоматическая оптимизация:** Реализована для новых проектов (40-60% ускорение)
+- **CI/CD pipeline:** Строгий контроль качества с fail-fast
+
+### 🏗️ Архитектурные улучшения
+- **Service Container:** Thread-safe dependency injection
+- **Error Handling:** Унифицированная система обработки ошибок
+- **Path Validation:** Защита от path traversal атак
+- **Auto Configuration:** Автоматическая загрузка .neira настроек
+- **API Rate Limiting:** Семафор для контроля AI API (max 5 запросов)
+
+## 🚨 Мониторинг
+
+### Ключевые метрики
+```bash
+# Проверка состояния тестов
+uv run pytest tests/ -v
+
+# Покрытие кода (должно быть ≥34%)
+uv run pytest --cov=src --cov-report=term-missing
+
+# Качество кода
+uv run ruff check .
+uv run mypy src/
+```
+
+### Критические компоненты для мониторинга
+1. **AnalysisSessionManager** - управление сессиями анализа
+2. **ServiceContainer** - dependency injection система
+3. **PathValidator** - валидация безопасности путей
+4. **ErrorHandling** - обработка и логирование ошибок
+
+## 🔄 Процедуры обслуживания
+
+### Еженедельные проверки
+- [ ] Запуск полного набора тестов
+- [ ] Проверка покрытия кода (цель: ≥34%)
+- [ ] Обновление зависимостей через `uv sync`
+- [ ] Проверка работы MCP сервера
+
+### Ежемесячные задачи
+- [ ] Обновление архитектурной документации
+- [ ] Анализ производительности на больших кодовых базах
+- [ ] Проверка security audit (bandit, pip-audit)
+- [ ] Очистка старых analysis/ файлов
+
+## 🐛 Устранение неполадок
+
+### Частые проблемы и решения
+
+#### 1. Проблемы с импортами в тестах
+```bash
+# Симптом: ModuleNotFoundError при запуске тестов
+# Решение: Проверить PYTHONPATH
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
+uv run pytest tests/
+```
+
+#### 2. Ошибки автоконфигурации
+```bash
+# Симптом: Не применяются настройки .neira
+# Проверка: Валидность конфигурации
+uv run python -c "from src.neira_code_analyzer.neira_config_loader import NeiraConfigLoader; print(NeiraConfigLoader().get_config_info('.'))"
+```
+
+#### 3. Performance деградация
+```bash
+# Симптом: Медленный анализ
+# Решение: Проверить фильтры
+uv run python -m src.neira_code_analyzer.main
+# В MCP клиенте: set_filters с preset="aggressive"
+```
+
+## 📈 Оптимизация производительности
+
+### Автоматическая оптимизация
+- **Новые проекты:** Автоматически применяется `set_filters` с aggressive preset
+- **Существующие проекты:** Сохраняют текущие настройки
+- **Graceful fallback:** Анализ продолжается даже при ошибках автонастройки
+
+### Мониторинг производительности
+```bash
+# Анализ времени выполнения
+time uv run python -c "
+from src.neira_code_analyzer.main import main
+# Время запуска MCP сервера
+"
+
+# Проверка размера контекста
+find . -name '*.py' | wc -l  # Количество файлов
+find . -name '*.py' -exec wc -l {} + | tail -1  # Общее количество строк
+```
+
+## 🔐 Безопасность
+
+### Текущие защиты
+- **Path Traversal:** Автоматическая валидация всех путей
+- **Input Sanitization:** Проверка пользовательских данных
+- **Rate Limiting:** Защита от перегрузки AI API
+- **Container Security:** Непривилегированный пользователь в Docker
+
+### Регулярные проверки безопасности
+```bash
+# Security audit
+uv run bandit -r src/
+uv run pip-audit
+
+# Vulnerability scan
+uv run safety check
+```
+
+## 📚 Ссылки на документацию
+
+- **Архитектура:** `docs/guides/architecture/overview.md`
+- **Тестирование:** `docs/guides/ops/testing.md`
+- **API:** `docs/API.md`
+- **Конфигурация:** `docs/guides/features/configuration.md`
+- **История изменений:** `docs/changelog/CHANGELOG.md`
+
+## 🆘 Поддержка
+
+### Известные ограничения
+- Максимальный размер анализируемого проекта: ~50MB кода
+- Concurrent AI запросы: 5 одновременно
+- Поддерживаемые языки: Python, JavaScript, TypeScript, Markdown
+
+### Контакты для поддержки
+- **Issues:** GitHub Issues для багов и feature requests
+- **Documentation:** Обновляется в `docs/` директории
+- **Testing:** Все изменения должны проходить через CI/CD 

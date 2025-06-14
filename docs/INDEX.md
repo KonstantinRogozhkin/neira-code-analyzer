@@ -1,38 +1,40 @@
-# Оглавление документации
+# Оглавление Документации
 
-Добро пожаловать в документацию по проекту **neira-code-analyzer**. Этот файл служит центральной точкой входа для навигации по всем разделам.
+Добро пожаловать в документацию по проекту **Neira Code Analyzer**. Этот документ служит центральным оглавлением для навигации по всем разделам.
 
-## 🚀 Быстрый старт
+## 🚀 Начало работы
 
-- [Основное описание (README)](./README.md)
-- [Начало работы (Quickstart)](./help/quickstart.md)
-- [Инструкции по установке](./guides/setup/installation.md)
+*   [README](README.md) - Общее описание проекта.
+*   [Быстрый старт (Quickstart)](help/quickstart.md) - Как быстро начать использовать инструмент.
+*   [Установка (Installation)](guides/setup/installation.md) - Подробные инструкции по установке.
 
-## 📖 Руководства
+## 📚 Руководства (Guides)
 
 ### Архитектура
-- [Обзор архитектуры](./guides/architecture/overview.md)
-- [Безопасность](./guides/architecture/security.md)
-- [Тестирование](./guides/architecture/testing.md)
+*   [Обзор архитектуры](guides/architecture/overview.md) - Высокоуровневое описание компонентов системы.
+*   [Безопасность](guides/architecture/security.md) - Информация о мерах безопасности.
+*   [Тестирование](guides/architecture/testing.md) - Подход к тестированию в проекте.
 
-### Ключевые возможности
-- [Конфигурация](./guides/features/configuration.md)
-- [Фильтрация кода](./guides/features/filtering.md)
-- [Интерактивный анализ](./guides/features/interactive_analysis.md)
-- [Использование шаблонов](./guides/features/templates.md)
+### Функциональность (Features)
+*   [Конфигурация](guides/features/configuration.md) - Как настраивать анализатор.
+*   [Интерактивный анализ](guides/features/interactive_analysis.md) - Использование в интерактивном режиме.
+*   [Использование шаблонов](guides/features/templates.md) - Работа с шаблонами анализа.
+*   [Фильтрация](guides/features/filtering.md) - Настройка и использование фильтров.
+*   [Генерация документации](guides/features/gen_docs.md) - Как использовать функцию авто-документирования.
 
 ### Примеры использования
-- [Кейсы использования](./guides/examples/use_cases.md)
+*   [Кейсы и примеры](guides/examples/use_cases.md) - Практические примеры применения.
 
-## 🛠️ API и Справочники
+### Эксплуатация (Ops)
+*   [Обслуживание](guides/ops/maintenance.md) - Рекомендации по поддержке.
+*   [Тестирование (Ops)](guides/ops/testing.md) - Процедуры операционного тестирования.
 
-- [Описание API](./API.md)
-- [Часто задаваемые вопросы (FAQ)](./FAQ.md)
+## 📖 Справочники
 
-## 🤝 Разработка и контрибьюция
+*   [Описание API](API.md) - Справочник по API.
+*   [Часто задаваемые вопросы (FAQ)](FAQ.md) - Ответы на популярные вопросы.
 
-- [Руководство для контрибьюторов](./CONTRIBUTING.md)
-- [История изменений](./changelog/CHANGELOG.md)
+## 🧑‍💻 Для контрибьюторов
 
-## 🗄️ Архив
-- [Архивные документы](./archive/)
+*   [Руководство по контрибьюции (CONTRIBUTING)](CONTRIBUTING.md) - Как внести свой вклад в проект.
+*   [Журнал изменений (Changelog)](changelog/CHANGELOG.md) - История изменений в проекте.

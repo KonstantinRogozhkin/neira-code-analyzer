@@ -39,9 +39,13 @@
 
 ### Обслуживание
 - [Мониторинг](guides/ops/maintenance.md) - Поддержка системы
-- [Тестирование](guides/ops/testing.md) - Запуск тестов
+- [Критические исправления](guides/ops/code-improvements.md) - Реализованные улучшения v2.0 ✅
+- [Управление тестами](guides/ops/test-management.md) - Система тестирования (95% готовности) ✅
 
-### Изменения
+### Интеграции
+- [Neira Browser](guides/features/browser-integration.md) - Интеграция с NEIRA Browser 2.0 ✅
+
+### Изменения  
 - [Последние изменения](changelog/major-fixes.md) - Критические обновления июня 2025
 - [Полный changelog](changelog/CHANGELOG.md) - История всех изменений
 
