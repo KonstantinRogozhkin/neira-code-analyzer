@@ -12,7 +12,7 @@ import pytest
 import threading
 import time
 from unittest.mock import Mock, patch
-from neira_code_analyzer.service_container import ServiceContainer
+from neira_code_analyzer.service_container import ServiceContainer, get_service_container
 
 
 class TestServiceContainer:
@@ -20,30 +20,37 @@ class TestServiceContainer:
     
     def setup_method(self):
         """Настройка перед каждым тестом"""
-        # Очищаем singleton для каждого теста
-        ServiceContainer._instance = None
-        ServiceContainer._lock = threading.Lock()
+        # Очищаем кэш для каждого теста
+        container = get_service_container()
+        container.clear_cache()
     
     def test_singleton_pattern(self):
-        """Тест что ServiceContainer - singleton"""
+        """Тест что global container - singleton"""
         
-        container1 = ServiceContainer.get_instance()
-        container2 = ServiceContainer.get_instance()
+        container1 = get_service_container()
+        container2 = get_service_container()
         
-        assert container1 is container2, "ServiceContainer должен быть singleton"
+        assert container1 is container2, "Global container должен быть singleton"
     
     def test_thread_safety(self):
-        """Тест thread-safety singleton"""
+        """Тест thread-safety для получения сервисов"""
         
-        instances = []
+        # Создаем тестовый класс для сервиса
+        class TestService:
+            def __init__(self):
+                self.value = "test"
         
-        def create_instance():
-            instances.append(ServiceContainer.get_instance())
+        results = []
+        
+        def get_service():
+            container = get_service_container()
+            service = container.get_service(TestService, singleton=True)
+            results.append(service)
         
         # Создаем несколько потоков
         threads = []
         for _ in range(10):
-            thread = threading.Thread(target=create_instance)
+            thread = threading.Thread(target=get_service)
             threads.append(thread)
             thread.start()
         
@@ -51,39 +58,51 @@ class TestServiceContainer:
         for thread in threads:
             thread.join()
         
-        # Все инстансы должны быть одинаковыми
-        first_instance = instances[0]
-        for instance in instances[1:]:
-            assert instance is first_instance, "Все инстансы должны быть одинаковыми"
+        # Все инстансы должны быть одинаковыми (singleton)
+        assert len(results) == 10, "Должно быть 10 результатов"
+        first_instance = results[0]
+        for instance in results[1:]:
+            assert instance is first_instance, "Все singleton инстансы должны быть одинаковыми"
     
     def test_register_and_get_service(self):
         """Тест регистрации и получения сервисов"""
         
-        container = ServiceContainer.get_instance()
+        container = get_service_container()
         
-        # Регистрируем mock сервис
-        mock_service = Mock()
-        container.register('test_service', mock_service)
+        # Создаем тестовый класс
+        class TestService:
+            def __init__(self):
+                self.value = "registered"
+        
+        # Регистрируем готовый экземпляр
+        test_instance = TestService()
+        container.register_instance(TestService, test_instance)
         
         # Получаем сервис
-        retrieved_service = container.get('test_service')
+        retrieved_service = container.get_service(TestService)
         
-        assert retrieved_service is mock_service, "Сервис должен возвращаться правильно"
+        assert retrieved_service is test_instance, "Зарегистрированный сервис должен возвращаться правильно"
     
     def test_get_nonexistent_service(self):
-        """Тест получения несуществующего сервиса"""
+        """Тест создания нового сервиса автоматически"""
         
-        container = ServiceContainer.get_instance()
+        container = get_service_container()
         
-        # Получаем несуществующий сервис
-        result = container.get('nonexistent_service')
+        # Создаем новый класс сервиса
+        class NewService:
+            def __init__(self):
+                self.created = True
         
-        assert result is None, "Несуществующий сервис должен возвращать None"
+        # Получаем сервис - должен создаться автоматически
+        result = container.get_service(NewService)
+        
+        assert result is not None, "Новый сервис должен создаться автоматически"
+        assert hasattr(result, 'created'), "Сервис должен быть правильно инициализирован"
     
     def test_clear_services(self):
         """Тест очистки всех сервисов"""
         
-        container = ServiceContainer.get_instance()
+        container = get_service_container()
         
         # Регистрируем несколько сервисов
         container.register('service1', Mock())

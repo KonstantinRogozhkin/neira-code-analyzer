@@ -22,7 +22,7 @@ from neira_code_analyzer.base_session_manager import BaseSessionManager, BaseSes
 
 # Тестовые классы для проверки абстрактных методов
 @dataclass
-class TestSessionState(BaseSessionState):
+class MockSessionState(BaseSessionState):
     """Тестовое состояние сессии для проверки базового класса"""
     test_data: str = "default_test_data"
 
@@ -32,15 +32,15 @@ class TestSessionState(BaseSessionState):
             self.session_type = "test"
 
 
-class TestSessionManager(BaseSessionManager):
+class MockSessionManager(BaseSessionManager):
     """Тестовый менеджер сессий для проверки базового класса"""
 
     def __init__(self):
         super().__init__("test")
 
-    def create_new_session(self, project_path: Path, **kwargs) -> TestSessionState:
+    def create_new_session(self, project_path: Path, **kwargs) -> MockSessionState:
         """Реализация абстрактного метода для тестов"""
-        return TestSessionState(
+        return MockSessionState(
             session_id="test_session",
             project_path=str(project_path),
             created_at=datetime.now().isoformat(),
@@ -50,9 +50,9 @@ class TestSessionManager(BaseSessionManager):
             test_data=kwargs.get("test_data", "test_value")
         )
 
-    def _deserialize_session(self, data: dict[str, Any]) -> TestSessionState:
+    def _deserialize_session(self, data: dict[str, Any]) -> MockSessionState:
         """Реализация абстрактного метода для тестов"""
-        return TestSessionState(**data)
+        return MockSessionState(**data)
 
 
 class TestBaseSessionState:
@@ -61,7 +61,7 @@ class TestBaseSessionState:
     def test_base_session_state_initialization(self):
         """Тест инициализации базового состояния"""
         # Arrange & Act
-        state = TestSessionState(
+        state = MockSessionState(
             session_id="test_id",
             project_path="/test/path",
             created_at="2024-01-01T00:00:00",
@@ -80,7 +80,7 @@ class TestBaseSessionState:
     def test_base_session_state_auto_generation(self):
         """Тест автоматической генерации полей"""
         # Arrange & Act
-        state = TestSessionState(
+        state = MockSessionState(
             session_id="",  # Пустой ID должен быть сгенерирован
             project_path="/test/path",
             created_at="",  # Пустая дата должна быть сгенерирована
@@ -101,7 +101,7 @@ class TestBaseSessionState:
         before_creation = datetime.now()
 
         # Act
-        state = TestSessionState(
+        state = MockSessionState(
             session_id="test",
             project_path="/test",
             created_at="",
@@ -127,7 +127,7 @@ class TestBaseSessionManager:
     def setup_method(self):
         """Настройка для каждого теста"""
         self.temp_dir = Path(tempfile.mkdtemp())
-        self.manager = TestSessionManager()
+        self.manager = MockSessionManager()
         self.test_project_path = self.temp_dir / "test_project"
         self.test_project_path.mkdir(parents=True, exist_ok=True)
 
@@ -139,7 +139,7 @@ class TestBaseSessionManager:
     def test_session_manager_initialization(self):
         """Тест инициализации менеджера сессий"""
         # Arrange & Act
-        manager = TestSessionManager()
+        manager = MockSessionManager()
 
         # Assert
         assert manager.session_type == "test"
@@ -405,7 +405,7 @@ class TestBaseSessionManagerErrorHandling:
     def setup_method(self):
         """Настройка для каждого теста"""
         self.temp_dir = Path(tempfile.mkdtemp())
-        self.manager = TestSessionManager()
+        self.manager = MockSessionManager()
         self.test_project_path = self.temp_dir / "test_project"
         self.test_project_path.mkdir(parents=True, exist_ok=True)
 

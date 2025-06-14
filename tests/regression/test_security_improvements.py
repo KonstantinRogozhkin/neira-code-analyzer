@@ -20,7 +20,7 @@ class TestPathTraversalSecurity:
     def setup_method(self):
         """Настройка перед каждым тестом"""
         self.project_path = Path("/safe/project")
-        self.executor = AnalysisActionExecutor(self.project_path)
+        self.executor = AnalysisActionExecutor()
     
     def test_path_traversal_prevention(self):
         """Тест предотвращения Path Traversal атак"""
@@ -35,9 +35,9 @@ class TestPathTraversalSecurity:
         ]
         
         for dangerous_path in dangerous_paths:
-            # Проверяем что опасные пути отклоняются
-            with pytest.raises((ValueError, PermissionError, FileNotFoundError)):
-                self.executor._validate_file_path(dangerous_path)
+            # Проверяем что опасные пути отклоняются  
+            result = self.executor._validate_file_path(Path(dangerous_path), self.project_path)
+            assert result is False, f"Dangerous path should be rejected: {dangerous_path}"
     
     def test_safe_paths_allowed(self):
         """Тест что безопасные пути разрешены"""
@@ -51,24 +51,17 @@ class TestPathTraversalSecurity:
         
         for safe_path in safe_paths:
             # Безопасные пути должны проходить валидацию
-            try:
-                result = self.executor._validate_file_path(safe_path)
-                assert result is not None or result is True
-            except FileNotFoundError:
-                # Файл может не существовать, но путь безопасен
-                pass
+            safe_full_path = self.project_path / safe_path
+            result = self.executor._validate_file_path(safe_full_path, self.project_path)
+            assert result is True, f"Safe path should be allowed: {safe_path}"
     
     def test_absolute_path_within_project_allowed(self):
         """Тест что абсолютные пути внутри проекта разрешены"""
         
         project_file = self.project_path / "src" / "main.py"
         
-        try:
-            result = self.executor._validate_file_path(str(project_file))
-            assert result is not None or result is True
-        except (FileNotFoundError, AttributeError):
-            # Метод может не существовать или файл не найден
-            pass
+        result = self.executor._validate_file_path(project_file, self.project_path)
+        assert result is True, f"Absolute path within project should be allowed: {project_file}"
 
 
 class TestAIResponseParserSecurity:
